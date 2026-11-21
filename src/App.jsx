@@ -1,4 +1,5 @@
 
+import PatientDashboard from "./components/PatientDashboard";
 import { useState } from "react";
 import {
   HeartPulse,
@@ -25,6 +26,7 @@ const roles = [
 ];
 
 function App() {
+  const [loggedIn, setLoggedIn] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
   const [language, setLanguage] = useState("English");
   const [authMode, setAuthMode] = useState("login");
@@ -42,23 +44,33 @@ function App() {
     setPassword("");
   };
 
-  const handleBack = () => {
-    setSelectedRole(null);
-    setMessage("");
-  };
+ const handleBack = () => {
+  setSelectedRole(null);
+  setLoggedIn(false);
+  setMessage("");
+};
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    setMessage(
-      authMode === "login"
-        ? "Demo login submitted. Real authentication will be connected in Phase 3."
-        : "Demo registration submitted. Your account will be created after backend integration."
-    );
-  };
+  if (selectedRole === "Patient") {
+    setLoggedIn(true);
+  } else {
+    setMessage("Demo login submitted. Other dashboards will be added next.");
+  }
+};
 
-  return (
-    <div className="app">
+   return (
+  <>
+    {loggedIn && selectedRole === "Patient" ? (
+      <PatientDashboard
+        onLogout={() => {
+          setLoggedIn(false);
+          setSelectedRole(null);
+        }}
+      />
+    ) : (
+      <div className="app">
       <header className="navbar">
         <div className="brand">
           <div className="brand-icon">
@@ -247,14 +259,17 @@ function App() {
             </p>
           </section>
         )}
-      </main>
+            </main>
 
       <footer>
         <p>
           © 2026 CareBridge · Connecting people through better healthcare
         </p>
       </footer>
-    </div>
+
+           </div>
+    )}
+  </>
   );
 }
 
