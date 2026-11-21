@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import PatientDashboard from "./components/PatientDashboard";
 import { supabase } from "./lib/supabase";
+
 import {
   HeartPulse,
   UserRound,
@@ -14,7 +15,17 @@ import {
   ShieldCheck,
   Globe,
   ArrowLeft,
+  Bell,
+  CheckCircle2,
+  RefreshCw,
+  LogOut,
+  AlertCircle,
+  Copy,
+  UserPlus,
+  Link2,
+  XCircle,
 } from "lucide-react";
+
 import "./index.css";
 
 const roles = [
@@ -50,6 +61,639 @@ const roles = [
   },
 ];
 
+// Patient-caregiver connection component
+function ConnectionPanel({ role }) {
+  const [userId, setUserId] = useState("");
+  const [connections, setConnections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
+
+  const loadConnections = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("Please log in again.");
+
+      setCurrentUserId(user.id);
+
+      const column =
+        role === "Patient" ? "patient_id" : "caregiver_id";
+
+      const { data, error: linkError } = await supabase
+        .from("caregiver_links")
+        .select("id, patient_id, caregiver_id, status, created_at")
+        .eq(column, user.id)
+        .order("created_at", { ascending: false });
+
+      if (linkError) throw linkError;
+
+      setConnections(data || []);
+    } catch (err) {
+      setError(err.message || "Unable to load connections.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadConnections();
+  }, [role]);
+
+  const sendRequest = async (event) => {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+
+    const targetId = userId.trim();
+
+    if (!targetId) {
+      setError("Enter the caregiver's account ID.");
+      return;
+    }
+
+    if (targetId === currentUserId) {
+      setError("You cannot connect your account to itself.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { error: insertError } = await supabase
+        .from("caregiver_links")
+        .insert({
+          patient_id: currentUserId,
+          caregiver_id: targetId,
+          status: "pending",
+        });
+
+      if (insertError) {
+        if (insertError.code === "23505") {
+          throw new Error(
+            "A connection request already exists for this account."
+          );
+        }
+
+        if (insertError.code === "23503") {
+          throw new Error(
+            "This account ID was not found. Ask the caregiver to check their ID."
+          );
+        }
+
+        throw insertError;
+      }
+
+      setMessage("Connection request sent successfully.");
+      setUserId("");
+      await loadConnections();
+    } catch (err) {
+      setError(err.message || "Could not send the request.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const respondToRequest = async (connectionId, status) => {
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const { error: updateError } = await supabase
+        .from("caregiver_links")
+        .update({ status })
+        .eq("id", connectionId)
+        .eq("status", "pending");
+
+      if (updateError) throw updateError;
+
+      setMessage(
+        status === "accepted"
+          ? "Connection request accepted."
+          : "Connection request rejected."
+      );
+
+      await loadConnections();
+    } catch (err) {
+      setError(err.message || "Unable to update the request.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyUserId = async () => {
+    try {
+      await navigator.clipboard.writeText(currentUserId);
+      setMessage("Your account ID has been copied.");
+    } catch {
+      setError("Could not copy automatically. Select and copy your ID.");
+    }
+  };
+
+  return (
+    <section className="dashboard-panel" style={{ marginBottom: 24 }}>
+      <div className="panel-heading">
+        <div>
+          <h2>
+            <Link2 size={21} />
+            {role === "Patient"
+              ? "Caregiver connections"
+              : "Patient connections"}
+          </h2>
+          <p>
+            {role === "Patient"
+              ? "Connect with someone who can support your care."
+              : "Review patient connection requests."}
+          </p>
+        </div>
+
+        <button
+          className="small-action"
+          type="button"
+          onClick={loadConnections}
+          disabled={loading}
+        >
+          <RefreshCw size={16} />
+          Refresh
+        </button>
+      </div>
+
+      <div
+        style={{
+          background: "#f3f8f6",
+          padding: 15,
+          borderRadius: 10,
+          marginBottom: 20,
+        }}
+      >
+        <p style={{ margin: "0 0 8px", fontWeight: 600 }}>
+          Your CareBridge account ID
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <code
+            style={{
+              overflowWrap: "anywhere",
+              fontSize: 13,
+              flex: 1,
+            }}
+          >
+            {currentUserId || "Loading account ID..."}
+          </code>
+
+          <button
+            className="small-action"
+            type="button"
+            onClick={copyUserId}
+            disabled={!currentUserId}
+          >
+            <Copy size={15} />
+            Copy ID
+          </button>
+        </div>
+
+        <p style={{ fontSize: 12, color: "#64746f", marginBottom: 0 }}>
+          Share this ID only with the person you want to connect with.
+        </p>
+      </div>
+
+      {role === "Patient" && (
+        <form onSubmit={sendRequest} style={{ marginBottom: 22 }}>
+          <label
+            htmlFor="caregiver-id"
+            style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+          >
+            Enter caregiver account ID
+          </label>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <input
+              id="caregiver-id"
+              type="text"
+              value={userId}
+              onChange={(event) => setUserId(event.target.value)}
+              placeholder="Paste caregiver UUID"
+              required
+              style={{ flex: 1, minWidth: 200 }}
+            />
+
+            <button
+              className="continue-button"
+              type="submit"
+              disabled={saving || !currentUserId}
+            >
+              <UserPlus size={17} />
+              {saving ? "Sending..." : "Send request"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {message && (
+        <p role="status" style={{ color: "#167044", marginBottom: 12 }}>
+          {message}
+        </p>
+      )}
+
+      {error && (
+        <p role="alert" style={{ color: "#b42318", marginBottom: 12 }}>
+          {error}
+        </p>
+      )}
+
+      <h3 style={{ marginBottom: 12 }}>
+        {role === "Patient" ? "Your caregivers" : "Patient requests"}
+      </h3>
+
+      {loading ? (
+        <p>Loading connections...</p>
+      ) : connections.length === 0 ? (
+        <p style={{ color: "#64746f", padding: "12px 0" }}>
+          {role === "Patient"
+            ? "No caregiver connections yet. Send a request using their account ID."
+            : "No patient connection requests yet."}
+        </p>
+      ) : (
+        <div className="medicine-list">
+          {connections.map((connection) => {
+            const otherUserId =
+              role === "Patient"
+                ? connection.caregiver_id
+                : connection.patient_id;
+
+            return (
+              <article
+                className="medicine-item"
+                key={connection.id}
+                style={{
+                  padding: 14,
+                  marginBottom: 10,
+                  border: "1px solid #e7ece9",
+                  borderRadius: 10,
+                }}
+              >
+                <div className="medicine-icon">
+                  <Users size={20} />
+                </div>
+
+                <div className="medicine-info" style={{ flex: 1 }}>
+                  <h3>
+                    {role === "Patient" ? "Caregiver" : "Patient"}
+                  </h3>
+
+                  <p
+                    style={{
+                      fontSize: 12,
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    Account ID: {otherUserId}
+                  </p>
+
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color:
+                        connection.status === "accepted"
+                          ? "#167044"
+                          : connection.status === "rejected"
+                            ? "#b42318"
+                            : "#b7791f",
+                    }}
+                  >
+                    {connection.status.toUpperCase()}
+                  </span>
+                </div>
+
+                {role === "Caregiver" &&
+                  connection.status === "pending" && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="taken-button"
+                        disabled={saving}
+                        onClick={() =>
+                          respondToRequest(connection.id, "accepted")
+                        }
+                      >
+                        <CheckCircle2 size={15} />
+                        Accept
+                      </button>
+
+                      <button
+                        type="button"
+                        className="skip-button"
+                        disabled={saving}
+                        onClick={() =>
+                          respondToRequest(connection.id, "rejected")
+                        }
+                      >
+                        <XCircle size={15} />
+                        Reject
+                      </button>
+                    </div>
+                  )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Patient dashboard wrapper
+function PatientHome({ onLogout }) {
+  return (
+    <>
+      <div className="patient-dashboard">
+        <main className="dashboard-content">
+          <ConnectionPanel role="Patient" />
+        </main>
+      </div>
+
+      <PatientDashboard onLogout={onLogout} />
+    </>
+  );
+}
+
+// Caregiver dashboard
+function CaregiverDashboard({ onLogout }) {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const unreadCount = notifications.filter(
+    (item) => !item.is_read
+  ).length;
+
+  const loadNotifications = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("Please log in again.");
+
+      const { data, error: notificationError } = await supabase
+        .from("notifications")
+        .select(
+          "id, title, message, is_read, created_at, patient_id"
+        )
+        .eq("recipient_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (notificationError) throw notificationError;
+
+      setNotifications(data || []);
+    } catch (err) {
+      setError(err.message || "Unable to load notifications.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+
+  const markAsRead = async (notificationId) => {
+    setUpdatingId(notificationId);
+    setError("");
+
+    try {
+      const { error: updateError } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", notificationId);
+
+      if (updateError) throw updateError;
+
+      setNotifications((previous) =>
+        previous.map((item) =>
+          item.id === notificationId
+            ? { ...item, is_read: true }
+            : item
+        )
+      );
+    } catch (err) {
+      setError(err.message || "Could not update notification.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  return (
+    <div className="patient-dashboard">
+      <header className="dashboard-navbar">
+        <div className="brand">
+          <div className="brand-icon">
+            <HeartPulse size={24} />
+          </div>
+          <span>CareBridge</span>
+        </div>
+
+        <button className="logout-button" onClick={onLogout}>
+          <LogOut size={17} />
+          Logout
+        </button>
+      </header>
+
+      <main className="dashboard-content">
+        <section className="dashboard-welcome">
+          <div>
+            <p className="dashboard-eyebrow">CAREGIVER DASHBOARD</p>
+            <h1>Welcome, Caregiver!</h1>
+            <p>Stay informed about the patients you support.</p>
+          </div>
+
+          <div className="dashboard-profile-icon">
+            <Users size={30} />
+          </div>
+        </section>
+
+        <ConnectionPanel role="Caregiver" />
+
+        <section className="dashboard-stats">
+          <article className="stat-card">
+            <div className="stat-icon">
+              <Bell />
+            </div>
+            <p>Total notifications</p>
+            <h2>{notifications.length}</h2>
+            <span>All alerts received</span>
+          </article>
+
+          <article className="stat-card">
+            <div className="stat-icon">
+              <AlertCircle />
+            </div>
+            <p>Unread notifications</p>
+            <h2>{unreadCount}</h2>
+            <span>Require your attention</span>
+          </article>
+        </section>
+
+        <section className="dashboard-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>
+                <Bell size={21} />
+                Patient alerts
+              </h2>
+              <p>Notifications about missed medicine doses.</p>
+            </div>
+
+            <button
+              className="small-action"
+              type="button"
+              onClick={loadNotifications}
+              disabled={loading}
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+          </div>
+
+          {error && (
+            <p role="alert" style={{ color: "#b42318", padding: 10 }}>
+              {error}
+            </p>
+          )}
+
+          {loading ? (
+            <p>Loading notifications...</p>
+          ) : notifications.length === 0 ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "35px 15px",
+                color: "#64746f",
+              }}
+            >
+              <Bell size={35} />
+              <h3>No notifications yet</h3>
+              <p>
+                When an accepted patient misses a medicine dose,
+                their alert will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="medicine-list">
+              {notifications.map((notification) => (
+                <article
+                  className="medicine-item"
+                  key={notification.id}
+                  style={{
+                    background: notification.is_read
+                      ? "#ffffff"
+                      : "#fff9ed",
+                    border: "1px solid #e7ece9",
+                    borderRadius: 10,
+                    padding: 15,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div className="medicine-icon">
+                    <AlertCircle size={21} />
+                  </div>
+
+                  <div className="medicine-info" style={{ flex: 1 }}>
+                    <h3>{notification.title}</h3>
+                    <p>{notification.message}</p>
+
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 12,
+                        color: "#77847f",
+                        marginTop: 8,
+                      }}
+                    >
+                      {new Date(
+                        notification.created_at
+                      ).toLocaleString("en-IN")}
+                    </span>
+
+                    <span
+                      style={{
+                        display: "inline-block",
+                        marginTop: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: notification.is_read
+                          ? "#64746f"
+                          : "#b7791f",
+                      }}
+                    >
+                      {notification.is_read ? "Read" : "Unread"}
+                    </span>
+                  </div>
+
+                  {!notification.is_read && (
+                    <button
+                      className="taken-button"
+                      type="button"
+                      disabled={updatingId === notification.id}
+                      onClick={() => markAsRead(notification.id)}
+                    >
+                      <CheckCircle2 size={15} />
+                      {updatingId === notification.id
+                        ? "Saving..."
+                        : "Mark read"}
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <p className="dashboard-disclaimer">
+          CareBridge provides health-management support, not medical
+          diagnosis. Contact healthcare professionals for medical advice.
+        </p>
+      </main>
+    </div>
+  );
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -64,15 +708,18 @@ function App() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
-  // Restore the existing login session when the app opens
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) {
         console.error("Session error:", error.message);
       }
 
-      setSession(data?.session ?? null);
-      setLoading(false);
+      if (mounted) {
+        setSession(data?.session ?? null);
+        setLoading(false);
+      }
     });
 
     const {
@@ -81,10 +728,20 @@ function App() {
       setSession(currentSession);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleRoleSelect = (role) => {
+    if (!["Patient", "Caregiver"].includes(role)) {
+      setMessage(
+        `${role} accounts are not enabled yet. This role will require administrator approval.`
+      );
+      return;
+    }
+
     setSelectedRole(role);
     setAuthMode("login");
     setMessage("");
@@ -98,15 +755,12 @@ function App() {
     setMessage("");
   };
 
-  // Real Supabase registration and login
   const handleSubmit = async (event) => {
     event.preventDefault();
     setMessage("");
 
-    if (selectedRole !== "Patient") {
-      setMessage(
-        "This role is currently in demo mode. Patient authentication is available."
-      );
+    if (!["Patient", "Caregiver"].includes(selectedRole)) {
+      setMessage("This account role is not enabled.");
       return;
     }
 
@@ -120,7 +774,7 @@ function App() {
           options: {
             data: {
               full_name: fullName.trim(),
-              role: "Patient",
+              role: selectedRole,
             },
           },
         });
@@ -138,24 +792,35 @@ function App() {
           setPassword("");
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
+        const { data, error } =
+          await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
 
         if (error) throw error;
+
+        const actualRole = data.user?.user_metadata?.role;
+
+        if (actualRole !== selectedRole) {
+          await supabase.auth.signOut();
+          throw new Error(
+            `This account is registered as ${actualRole || "another role"}. Select the correct role to log in.`
+          );
+        }
 
         setSession(data.session);
         setMessage("");
       }
     } catch (error) {
-      setMessage(error.message || "Something went wrong. Please try again.");
+      setMessage(
+        error.message || "Something went wrong. Please try again."
+      );
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // Secure logout through Supabase
   const handleLogout = async () => {
     setAuthLoading(true);
 
@@ -184,9 +849,35 @@ function App() {
     );
   }
 
-  // Show dashboard only to authenticated patients
-  if (session && session.user.user_metadata?.role === "Patient") {
-    return <PatientDashboard onLogout={handleLogout} />;
+  if (session) {
+    const role = session.user.user_metadata?.role;
+
+    if (role === "Patient") {
+      return <PatientHome onLogout={handleLogout} />;
+    }
+
+    if (role === "Caregiver") {
+      return <CaregiverDashboard onLogout={handleLogout} />;
+    }
+
+    return (
+      <div className="app">
+        <main className="main-content">
+          <h2>Account role not enabled</h2>
+          <p>
+            This account does not have an enabled dashboard.
+            Contact the administrator.
+          </p>
+          <button
+            className="continue-button"
+            onClick={handleLogout}
+            disabled={authLoading}
+          >
+            Logout
+          </button>
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -230,9 +921,10 @@ function App() {
               </h1>
 
               <p className="welcome-description">
-                Your health journey, connected with the people who care.
-                Manage medicines, stay informed and connect with healthcare
-                professionals through one simple platform.
+                Your health journey, connected with the people
+                who care. Manage medicines, stay informed and
+                connect with healthcare professionals through
+                one simple platform.
               </p>
 
               <div className="trust-note">
@@ -249,9 +941,19 @@ function App() {
                 </div>
               </div>
 
+              {message && (
+                <p className="demo-note" role="status">
+                  {message}
+                </p>
+              )}
+
               <div className="role-grid">
                 {roles.map((role) => {
                   const Icon = role.icon;
+                  const enabled = [
+                    "Patient",
+                    "Caregiver",
+                  ].includes(role.name);
 
                   return (
                     <button
@@ -266,6 +968,7 @@ function App() {
                       <div className="role-details">
                         <h3>{role.name}</h3>
                         <p>{role.description}</p>
+                        {!enabled && <small>Coming soon</small>}
                       </div>
 
                       <ArrowRight className="role-arrow" size={19} />
@@ -330,7 +1033,9 @@ function App() {
                     type="text"
                     placeholder="Enter your full name"
                     value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
+                    onChange={(event) =>
+                      setFullName(event.target.value)
+                    }
                     autoComplete="name"
                     maxLength={100}
                     required
@@ -357,7 +1062,9 @@ function App() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={
-                  authMode === "login" ? "current-password" : "new-password"
+                  authMode === "login"
+                    ? "current-password"
+                    : "new-password"
                 }
                 minLength={6}
                 required
@@ -381,13 +1088,6 @@ function App() {
             {message && (
               <p className="demo-note" role="status">
                 {message}
-              </p>
-            )}
-
-            {selectedRole !== "Patient" && (
-              <p className="demo-note">
-                This role is currently a demonstration interface. Real
-                authentication is available for patients.
               </p>
             )}
           </section>
