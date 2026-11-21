@@ -1,5 +1,7 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+
 import {
   HeartPulse,
   Pill,
@@ -15,26 +17,120 @@ import {
   X,
 } from "lucide-react";
 
-const initialMedicines = [
-  { id: 1, name: "Morning medicine", time: "8:00 AM", status: "Taken" },
-  { id: 2, name: "Afternoon medicine", time: "2:00 PM", status: "Pending" },
-  { id: 3, name: "Night medicine", time: "9:00 PM", status: "Upcoming" },
-];
-
 function formatTime(time) {
   const [hours, minutes] = time.split(":");
   const hour = Number(hours);
   const period = hour >= 12 ? "PM" : "AM";
-  const displayHour = hour % 12 || 12;
+  return `${hour % 12 || 12}:${minutes} ${period}`;
+}
 
-  return `${displayHour}:${minutes} ${period}`;
+function getTodayRange() {
+  const now = new Date();
+
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+
+  const end = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1
+  );
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
+}
+
+function getScheduledDateTime(time) {
+  const now = new Date();
+  const [hours, minutes] = time.split(":").map(Number);
+
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    hours,
+    minutes
+  ).toISOString();
 }
 
 function PatientDashboard({ onLogout }) {
-  const [medicines, setMedicines] = useState(initialMedicines);
+  const [medicines, setMedicines] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMedicineName, setNewMedicineName] = useState("");
   const [newMedicineTime, setNewMedicineTime] = useState("08:00");
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState(null);
+  const [error, setError] = useState("");
+
+  // Fetch medicines and today's dose history
+  useEffect(() => {
+    async function loadMedicines() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) throw userError;
+        if (!user) throw new Error("Please log in again.");
+
+        const { data: medicineData, error: medicineError } =
+          await supabase
+            .from("medicines")
+            .select("id, name, scheduled_time")
+            .eq("patient_id", user.id)
+            .eq("is_active", true)
+            .order("scheduled_time");
+
+        if (medicineError) throw medicineError;
+
+        const { start, end } = getTodayRange();
+
+        const { data: logData, error: logError } =
+          await supabase
+            .from("dose_logs")
+            .select("medicine_id, status")
+            .eq("patient_id", user.id)
+            .gte("scheduled_for", start)
+            .lt("scheduled_for", end);
+
+        if (logError) throw logError;
+
+        const updatedMedicines = (medicineData || []).map(
+          (medicine) => {
+            const log = (logData || []).find(
+              (item) => item.medicine_id === medicine.id
+            );
+
+            return {
+              id: medicine.id,
+              name: medicine.name,
+              time: medicine.scheduled_time.slice(0, 5),
+              status: log ? log.status : "Upcoming",
+            };
+          }
+        );
+
+        setMedicines(updatedMedicines);
+      } catch (err) {
+        setError(err.message || "Unable to load medicines.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadMedicines();
+  }, []);
 
   const takenCount = medicines.filter(
     (medicine) => medicine.status === "Taken"
@@ -46,64 +142,114 @@ function PatientDashboard({ onLogout }) {
 
   const pendingCount = medicines.filter(
     (medicine) =>
-      medicine.status === "Pending" || medicine.status === "Upcoming"
+      medicine.status !== "Taken" &&
+      medicine.status !== "Skipped"
   ).length;
 
-  const markTaken = (id) => {
-    setMedicines((previous) =>
-      previous.map((medicine) =>
-        medicine.id === id && medicine.status !== "Taken" &&
-        medicine.status !== "Skipped"
-          ? { ...medicine, status: "Taken" }
-          : medicine
-      )
-    );
-  };
-
-  const markSkipped = (id) => {
-    setMedicines((previous) =>
-      previous.map((medicine) =>
-        medicine.id === id && medicine.status !== "Taken" &&
-        medicine.status !== "Skipped"
-          ? { ...medicine, status: "Skipped" }
-          : medicine
-      )
-    );
-  };
-
-  const addMedicine = (event) => {
+  // Add medicine to Supabase
+  const addMedicine = async (event) => {
     event.preventDefault();
 
     const name = newMedicineName.trim();
 
     if (!name) return;
 
-    const newMedicine = {
-      id: Date.now(),
-      name,
-      time: formatTime(newMedicineTime),
-      status: "Upcoming",
-    };
+    setSaving(true);
+    setError("");
 
-    setMedicines((previous) =>
-      [...previous, newMedicine].sort((a, b) => {
-        const toMinutes = (time) => {
-          const [clock, period] = time.split(" ");
-          let [hours, minutes] = clock.split(":").map(Number);
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-          if (period === "PM" && hours !== 12) hours += 12;
-          if (period === "AM" && hours === 12) hours = 0;
+      if (userError) throw userError;
+      if (!user) throw new Error("Please log in again.");
 
-          return hours * 60 + minutes;
-        };
+      const { data, error: insertError } = await supabase
+        .from("medicines")
+        .insert({
+          patient_id: user.id,
+          name,
+          scheduled_time: newMedicineTime,
+        })
+        .select("id, name, scheduled_time")
+        .single();
 
-        return toMinutes(a.time) - toMinutes(b.time);
-      })
-    );
+      if (insertError) throw insertError;
 
-    setNewMedicineName("");
-    setNewMedicineTime("08:00");
-    setShowAddForm(false);
+      setMedicines((previous) =>
+        [
+          ...previous,
+          {
+            id: data.id,
+            name: data.name,
+            time: data.scheduled_time.slice(0, 5),
+            status: "Upcoming",
+          },
+        ].sort((a, b) => a.time.localeCompare(b.time))
+      );
+
+      setNewMedicineName("");
+      setNewMedicineTime("08:00");
+      setShowAddForm(false);
+    } catch (err) {
+      setError(err.message || "Could not save medicine.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Record Taken or Skipped in dose_logs
+  const updateDoseStatus = async (medicine, status) => {
+    if (
+      medicine.status === "Taken" ||
+      medicine.status === "Skipped"
+    ) {
+      return;
+    }
+
+    setActionId(medicine.id);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("Please log in again.");
+
+      const log = {
+        patient_id: user.id,
+        medicine_id: medicine.id,
+        scheduled_for: getScheduledDateTime(medicine.time),
+        status,
+      };
+
+      if (status === "Taken") {
+        log.taken_at = new Date().toISOString();
+      }
+
+      const { error: logError } = await supabase
+        .from("dose_logs")
+        .insert(log);
+
+      if (logError) throw logError;
+
+      setMedicines((previous) =>
+        previous.map((item) =>
+          item.id === medicine.id
+            ? { ...item, status }
+            : item
+        )
+      );
+    } catch (err) {
+      setError(err.message || "Could not update dose status.");
+    } finally {
+      setActionId(null);
+    }
   };
 
   return (
@@ -185,6 +331,12 @@ function PatientDashboard({ onLogout }) {
             </button>
           </div>
 
+          {error && (
+            <p style={{ color: "#b42318", padding: "10px" }}>
+              {error}
+            </p>
+          )}
+
           {showAddForm && (
             <form className="add-medicine-form" onSubmit={addMedicine}>
               <h3>Add a medicine</h3>
@@ -195,7 +347,9 @@ function PatientDashboard({ onLogout }) {
                 type="text"
                 placeholder="Enter medicine name"
                 value={newMedicineName}
-                onChange={(event) => setNewMedicineName(event.target.value)}
+                onChange={(event) =>
+                  setNewMedicineName(event.target.value)
+                }
                 required
                 maxLength={80}
               />
@@ -205,69 +359,89 @@ function PatientDashboard({ onLogout }) {
                 id="medicine-time"
                 type="time"
                 value={newMedicineTime}
-                onChange={(event) => setNewMedicineTime(event.target.value)}
+                onChange={(event) =>
+                  setNewMedicineTime(event.target.value)
+                }
                 required
               />
 
-              <button className="save-medicine-button" type="submit">
+              <button
+                className="save-medicine-button"
+                type="submit"
+                disabled={saving}
+              >
                 <Plus size={17} />
-                Save medicine
+                {saving ? "Saving..." : "Save medicine"}
               </button>
             </form>
           )}
 
           <div className="medicine-list">
-            {medicines.map((medicine) => (
-              <article className="medicine-item" key={medicine.id}>
-                <div className="medicine-icon">
-                  <Pill size={21} />
-                </div>
+            {loading ? (
+              <p>Loading your medicines...</p>
+            ) : medicines.length === 0 ? (
+              <p>No medicines added yet. Click Add to create your schedule.</p>
+            ) : (
+              medicines.map((medicine) => (
+                <article className="medicine-item" key={medicine.id}>
+                  <div className="medicine-icon">
+                    <Pill size={21} />
+                  </div>
 
-                <div className="medicine-info">
-                  <h3>{medicine.name}</h3>
-                  <p>
-                    <Clock size={14} />
-                    {medicine.time}
-                  </p>
-                </div>
+                  <div className="medicine-info">
+                    <h3>{medicine.name}</h3>
+                    <p>
+                      <Clock size={14} />
+                      {formatTime(medicine.time)}
+                    </p>
+                  </div>
 
-                <div className="medicine-action">
-                  {medicine.status === "Taken" ? (
-                    <span className="status-taken">
-                      <CheckCircle2 size={15} /> Taken
-                    </span>
-                  ) : medicine.status === "Skipped" ? (
-                    <span className="status-skipped">
-                      <XCircle size={15} /> Skipped
-                    </span>
-                  ) : (
-                    <>
-                      <span className="status-pending">
-                        {medicine.status}
+                  <div className="medicine-action">
+                    {medicine.status === "Taken" ? (
+                      <span className="status-taken">
+                        <CheckCircle2 size={15} /> Taken
                       </span>
+                    ) : medicine.status === "Skipped" ? (
+                      <span className="status-skipped">
+                        <XCircle size={15} /> Skipped
+                      </span>
+                    ) : (
+                      <>
+                        <span className="status-pending">
+                          {medicine.status}
+                        </span>
 
-                      <div className="medicine-buttons">
-                        <button
-                          className="taken-button"
-                          onClick={() => markTaken(medicine.id)}
-                          type="button"
-                        >
-                          Mark taken
-                        </button>
+                        <div className="medicine-buttons">
+                          <button
+                            className="taken-button"
+                            type="button"
+                            disabled={actionId === medicine.id}
+                            onClick={() =>
+                              updateDoseStatus(medicine, "Taken")
+                            }
+                          >
+                            {actionId === medicine.id
+                              ? "Saving..."
+                              : "Mark taken"}
+                          </button>
 
-                        <button
-                          className="skip-button"
-                          onClick={() => markSkipped(medicine.id)}
-                          type="button"
-                        >
-                          Skip
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </article>
-            ))}
+                          <button
+                            className="skip-button"
+                            type="button"
+                            disabled={actionId === medicine.id}
+                            onClick={() =>
+                              updateDoseStatus(medicine, "Skipped")
+                            }
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </section>
 

@@ -1,6 +1,7 @@
 
+import { useEffect, useState } from "react";
 import PatientDashboard from "./components/PatientDashboard";
-import { useState } from "react";
+import { supabase } from "./lib/supabase";
 import {
   HeartPulse,
   UserRound,
@@ -17,23 +18,71 @@ import {
 import "./index.css";
 
 const roles = [
-  { name: "Patient", description: "Manage medicines and health updates", icon: UserRound },
-  { name: "Doctor", description: "Monitor patients and manage care", icon: Stethoscope },
-  { name: "Nurse", description: "Track medicines and patient support", icon: ClipboardList },
-  { name: "Hospital", description: "Coordinate healthcare services", icon: Hospital },
-  { name: "Caregiver", description: "Support a family member or patient", icon: Users },
-  { name: "Volunteer", description: "Help patients access healthcare", icon: HandHeart },
+  {
+    name: "Patient",
+    description: "Manage medicines and health updates",
+    icon: UserRound,
+  },
+  {
+    name: "Doctor",
+    description: "Monitor patients and manage care",
+    icon: Stethoscope,
+  },
+  {
+    name: "Nurse",
+    description: "Track medicines and patient support",
+    icon: ClipboardList,
+  },
+  {
+    name: "Hospital",
+    description: "Coordinate healthcare services",
+    icon: Hospital,
+  },
+  {
+    name: "Caregiver",
+    description: "Support a family member or patient",
+    icon: Users,
+  },
+  {
+    name: "Volunteer",
+    description: "Help patients access healthcare",
+    icon: HandHeart,
+  },
 ];
 
 function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
+
   const [selectedRole, setSelectedRole] = useState(null);
   const [language, setLanguage] = useState("English");
   const [authMode, setAuthMode] = useState("login");
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+
+  // Restore the existing login session when the app opens
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error("Session error:", error.message);
+      }
+
+      setSession(data?.session ?? null);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleRoleSelect = (role) => {
     setSelectedRole(role);
@@ -44,33 +93,104 @@ function App() {
     setPassword("");
   };
 
- const handleBack = () => {
-  setSelectedRole(null);
-  setLoggedIn(false);
-  setMessage("");
-};
+  const handleBack = () => {
+    setSelectedRole(null);
+    setMessage("");
+  };
 
-  const handleSubmit = (e) => {
-  e.preventDefault();
+  // Real Supabase registration and login
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setMessage("");
 
-  if (selectedRole === "Patient") {
-    setLoggedIn(true);
-  } else {
-    setMessage("Demo login submitted. Other dashboards will be added next.");
-  }
-};
+    if (selectedRole !== "Patient") {
+      setMessage(
+        "This role is currently in demo mode. Patient authentication is available."
+      );
+      return;
+    }
 
-   return (
-  <>
-    {loggedIn && selectedRole === "Patient" ? (
-      <PatientDashboard
-        onLogout={() => {
-          setLoggedIn(false);
-          setSelectedRole(null);
-        }}
-      />
-    ) : (
+    setAuthLoading(true);
+
+    try {
+      if (authMode === "register") {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
+              role: "Patient",
+            },
+          },
+        });
+
+        if (error) throw error;
+
+        if (data.session) {
+          setSession(data.session);
+          setMessage("Account created successfully!");
+        } else {
+          setMessage(
+            "Registration successful! Check your email to confirm your account, then log in."
+          );
+          setAuthMode("login");
+          setPassword("");
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (error) throw error;
+
+        setSession(data.session);
+        setMessage("");
+      }
+    } catch (error) {
+      setMessage(error.message || "Something went wrong. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Secure logout through Supabase
+  const handleLogout = async () => {
+    setAuthLoading(true);
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setSession(null);
+      setSelectedRole(null);
+      setEmail("");
+      setPassword("");
+      setMessage("");
+    }
+
+    setAuthLoading(false);
+  };
+
+  if (loading) {
+    return (
       <div className="app">
+        <main className="main-content">
+          <p>Loading CareBridge...</p>
+        </main>
+      </div>
+    );
+  }
+
+  // Show dashboard only to authenticated patients
+  if (session && session.user.user_metadata?.role === "Patient") {
+    return <PatientDashboard onLogout={handleLogout} />;
+  }
+
+  return (
+    <div className="app">
       <header className="navbar">
         <div className="brand">
           <div className="brand-icon">
@@ -83,7 +203,7 @@ function App() {
           <Globe size={17} />
           <select
             value={language}
-            onChange={(e) => setLanguage(e.target.value)}
+            onChange={(event) => setLanguage(event.target.value)}
             aria-label="Select language"
           >
             <option value="English">English</option>
@@ -167,7 +287,8 @@ function App() {
             </div>
 
             <h2>
-              {selectedRole} {authMode === "login" ? "Login" : "Registration"}
+              {selectedRole}{" "}
+              {authMode === "login" ? "Login" : "Registration"}
             </h2>
 
             <p className="login-description">
@@ -209,8 +330,9 @@ function App() {
                     type="text"
                     placeholder="Enter your full name"
                     value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    onChange={(event) => setFullName(event.target.value)}
                     autoComplete="name"
+                    maxLength={100}
                     required
                   />
                 </>
@@ -222,7 +344,7 @@ function App() {
                 type="email"
                 placeholder="Enter your email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 required
               />
@@ -233,7 +355,7 @@ function App() {
                 type="password"
                 placeholder="Enter your password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => setPassword(event.target.value)}
                 autoComplete={
                   authMode === "login" ? "current-password" : "new-password"
                 }
@@ -241,9 +363,18 @@ function App() {
                 required
               />
 
-              <button className="continue-button" type="submit">
-                {authMode === "login" ? "Continue" : "Create account"}
-                <ArrowRight size={18} />
+              <button
+                className="continue-button"
+                type="submit"
+                disabled={authLoading}
+              >
+                {authLoading
+                  ? "Please wait..."
+                  : authMode === "login"
+                    ? "Continue"
+                    : "Create account"}
+
+                {!authLoading && <ArrowRight size={18} />}
               </button>
             </form>
 
@@ -253,23 +384,22 @@ function App() {
               </p>
             )}
 
-            <p className="demo-note">
-              Demo interface only. No real account is created and no
-              authentication is performed yet.
-            </p>
+            {selectedRole !== "Patient" && (
+              <p className="demo-note">
+                This role is currently a demonstration interface. Real
+                authentication is available for patients.
+              </p>
+            )}
           </section>
         )}
-            </main>
+      </main>
 
       <footer>
         <p>
           © 2026 CareBridge · Connecting people through better healthcare
         </p>
       </footer>
-
-           </div>
-    )}
-  </>
+    </div>
   );
 }
 
