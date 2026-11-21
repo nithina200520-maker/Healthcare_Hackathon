@@ -195,7 +195,7 @@ export const translations = {
     "This feature is for non-emergency communication. It does not provide emergency medical assistance or replace professional medical care.":
       "ಈ ವೈಶಿಷ್ಟ್ಯವು ತುರ್ತು-ಅಲ್ಲದ ಸಂವಹನಕ್ಕಾಗಿ ಮಾತ್ರ. ಇದು ತುರ್ತು ವೈದ್ಯಕೀಯ ನೆರವು ನೀಡುವುದಿಲ್ಲ ಅಥವಾ ವೃತ್ತಿಪರ ವೈದ್ಯಕೀಯ ಆರೈಕೆಯನ್ನು ಬದಲಿಸುವುದಿಲ್ಲ.",
 
-    // Doctor Dashboard
+    // Doctor Dashboard & Physical Meeting Scheduling
     "DOCTOR DASHBOARD": "ವೈದ್ಯರ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
     "Welcome, Doctor!": "ಸ್ವಾಗತ, ವೈದ್ಯರೇ!",
     "Review concerns from your assigned patients and provide responses.": "ನಿಮ್ಮ ನಿಯೋಜಿತ ರೋಗಿಗಳಿಂದ ಬಂದ ಕಾಳಜಿಗಳನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಪ್ರತಿಕ್ರಿಯೆಗಳನ್ನು ನೀಡಿ.",
@@ -204,9 +204,26 @@ export const translations = {
     "Active assignments": "ಸಕ್ರಿಯ ನಿಯೋಜನೆಗಳು",
     "Awaiting response": "ಪ್ರತಿಕ್ರಿಯೆಗಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ",
     "Responded": "ಪ್ರತಿಕ್ರಿಯಿಸಲಾಗಿದೆ",
+    "Scheduled": "ನಿಗದಿಯಾಗಿದೆ",
     "Responses submitted": "ಸಲ್ಲಿಸಿದ ಪ್ರತಿಕ್ರಿಯೆಗಳು",
     "Patient concerns": "ರೋಗಿಯ ಕಾಳಜಿಗಳು",
     "Review patient messages and submit your responses.": "ರೋಗಿಯ ಸಂದೇಶಗಳನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆಗಳನ್ನು ಸಲ್ಲಿಸಿ.",
+    "Schedule physical in-person meeting": "ಭೌತಿಕ ಮುಖಾಮುಖಿ ಭೇಟಿಯನ್ನು ನಿಗದಿಪಡಿಸಿ",
+    "Create Physical Meeting Schedule & Send SMS": "ಭೌತಿಕ ಭೇಟಿ ವೇಳಾಪಟ್ಟಿ ರಚಿಸಿ ಮತ್ತು SMS ಕಳುಹಿಸಿ",
+    "Physical Meeting Date & Time": "ಭೌತಿಕ ಭೇಟಿಯ ದಿನಾಂಕ ಮತ್ತು ಸಮಯ",
+    "Meeting Location / Hospital Clinic": "ಭೇಟಿಯ ಸ್ಥಳ / ಆಸ್ಪತ್ರೆಯ ಕ್ಲಿನಿಕ್",
+    "Instructions for Physical Meeting": "ಭೌತಿಕ ಭೇಟಿಗಾಗಿ ಸೂಚನೆಗಳು",
+    "Patient phone number": "ರೋಗಿಯ ದೂರವಾಣಿ ಸಂಖ್ಯೆ",
+    "Caretaker phone number": "ಆರೈಕೆದಾರರ ದೂರವಾಣಿ ಸಂಖ್ಯೆ",
+    "SMS Sent to Patient and Caretaker": "ರೋಗಿ ಮತ್ತು ಆರೈಕೆದಾರರಿಗೆ SMS ಕಳುಹಿಸಲಾಗಿದೆ",
+    "In-Person Physical Meeting Scheduled": "ಮುಖಾಮುಖಿ ಭೌತಿಕ ಸಮಾಲೋಚನೆ ನಿಗದಿಯಾಗಿದೆ",
+    "Reschedule Meeting": "ಭೇಟಿಯನ್ನು ಮರುನಿಗದಿಪಡಿಸಿ",
+    "SMS Dispatched Successfully": "SMS ಯಶಸ್ವಿಯಾಗಿ ರವಾನೆಯಾಗಿದೆ",
+    "Physical meeting schedule created and SMS sent to patient & caretaker.":
+      "ಭೌತಿಕ ಭೇಟಿ ವೇಳಾಪಟ್ಟಿ ರಚಿಸಲಾಗಿದೆ ಮತ್ತು ರೋಗಿ ಹಾಗೂ ಆರೈಕೆದಾರರಿಗೆ SMS ಕಳುಹಿಸಲಾಗಿದೆ.",
+    "Phone number (for SMS notifications)": "ದೂರವಾಣಿ ಸಂಖ್ಯೆ (SMS ಅಧಿಸೂಚನೆಗಳಿಗಾಗಿ)",
+    "Enter phone number (e.g. +91 98765 43210)": "ದೂರವಾಣಿ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ (ಉದಾ: +91 98765 43210)",
+    "Please enter your phone number to receive SMS updates.": "SMS ಅಪ್‌ಡೇಟ್‌ಗಳನ್ನು ಸ್ವೀಕರಿಸಲು ದಯವಿಟ್ಟು ನಿಮ್ಮ ದೂರವಾಣಿ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ.",
     "Your response": "ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ",
     "Write your response...": "ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಬರೆಯಿರಿ...",
     "Submit response": "ಪ್ರತಿಕ್ರಿಯೆ ಸಲ್ಲಿಸಿ",

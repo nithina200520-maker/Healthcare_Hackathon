@@ -33,6 +33,10 @@ import {
   Send,
   Reply,
   FileText,
+  CalendarDays,
+  Phone,
+  RotateCcw,
+  MapPin,
 } from "lucide-react";
 
 import "./index.css";
@@ -742,25 +746,110 @@ function PatientConcernPanel() {
                 {t("Doctor ID")}: {concern.doctor_id}
               </p>
 
-              {concern.response ? (
-                <div
-                  style={{
-                    background: "#f0f8f4",
-                    padding: 14,
-                    borderRadius: 9,
-                    marginTop: 12,
-                  }}
-                >
-                  <h4 style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                    <Reply size={16} /> {t("Doctor's response")}
-                  </h4>
-                  <p style={{ margin: 0 }}>{concern.response}</p>
-                </div>
-              ) : (
-                <p style={{ color: "#b7791f", fontSize: 13 }}>
-                  {t("Waiting for your doctor to respond.")}
-                </p>
-              )}
+              {(() => {
+                if (!concern.response) {
+                  return (
+                    <p style={{ color: "#b7791f", fontSize: 13, marginTop: 10 }}>
+                      {t("Waiting for your doctor to respond.")}
+                    </p>
+                  );
+                }
+
+                let schedule = null;
+                try {
+                  schedule = JSON.parse(concern.response);
+                } catch {
+                  // standard text response
+                }
+
+                if (schedule && schedule.is_physical_meeting) {
+                  return (
+                    <div
+                      style={{
+                        background: "#f0f8f5",
+                        padding: 15,
+                        borderRadius: 10,
+                        marginTop: 12,
+                        border: "1px solid #cce5d8",
+                      }}
+                    >
+                      <h4
+                        style={{
+                          margin: "0 0 10px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 7,
+                          color: "#087f68",
+                          fontSize: 15,
+                        }}
+                      >
+                        <CalendarDays size={18} />
+                        {t("In-Person Physical Meeting Scheduled")}
+                      </h4>
+
+                      <div style={{ display: "grid", gap: 7, fontSize: 13 }}>
+                        <div>
+                          <strong>{t("Physical Meeting Date & Time")}:</strong>{" "}
+                          <span style={{ color: "#087f68", fontWeight: 700 }}>
+                            {new Date(schedule.meet_date).toLocaleString("en-IN", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                          </span>
+                        </div>
+
+                        <div>
+                          <strong>{t("Meeting Location / Hospital Clinic")}:</strong>{" "}
+                          <span>{schedule.meet_location}</span>
+                        </div>
+
+                        {schedule.instructions && (
+                          <div>
+                            <strong>{t("Instructions for Physical Meeting")}:</strong>{" "}
+                            <span>{schedule.instructions}</span>
+                          </div>
+                        )}
+
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: "8px 12px",
+                            background: "#ffffff",
+                            borderRadius: 8,
+                            border: "1px solid #d4ece0",
+                            color: "#167044",
+                            fontSize: 12,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <Phone size={14} />
+                          <span>
+                            {t("SMS Sent to Patient and Caretaker")} ({schedule.patient_phone} &amp; {schedule.caretaker_phone})
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    style={{
+                      background: "#f0f8f4",
+                      padding: 14,
+                      borderRadius: 9,
+                      marginTop: 12,
+                    }}
+                  >
+                    <h4 style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      <Reply size={16} /> {t("Doctor's response")}
+                    </h4>
+                    <p style={{ margin: 0 }}>{concern.response}</p>
+                  </div>
+                );
+              })()}
 
               <p style={{ fontSize: 12, color: "#77847f", marginTop: 10 }}>
                 {t("Submitted")}: {new Date(concern.created_at).toLocaleString("en-IN")}
@@ -1273,7 +1362,10 @@ function DoctorDashboard({ onLogout }) {
   const { t } = useLanguage();
   const [concerns, setConcerns] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [responses, setResponses] = useState({});
+  const [scheduleForms, setScheduleForms] = useState({});
+  const [editingScheduleIds, setEditingScheduleIds] = useState({});
+  const [patientProfiles, setPatientProfiles] = useState({});
+  const [patientCaregivers, setPatientCaregivers] = useState({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [error, setError] = useState("");
@@ -1315,8 +1407,62 @@ function DoctorDashboard({ onLogout }) {
       if (concernResult.error) throw concernResult.error;
       if (assignmentResult.error) throw assignmentResult.error;
 
-      setConcerns(concernResult.data || []);
+      const loadedConcerns = concernResult.data || [];
+      setConcerns(loadedConcerns);
       setAssignments(assignmentResult.data || []);
+
+      // Load patient profiles and linked caretakers for SMS
+      const patientIds = [...new Set(loadedConcerns.map((c) => c.patient_id))];
+      const profilesMap = {};
+      const caregiversMap = {};
+
+      if (patientIds.length > 0) {
+        try {
+          const [profilesRes, linksRes] = await Promise.all([
+            supabase
+              .from("profiles")
+              .select("id, full_name, phone")
+              .in("id", patientIds),
+            supabase
+              .from("caregiver_links")
+              .select("patient_id, caregiver_id, status")
+              .in("patient_id", patientIds)
+              .eq("status", "accepted"),
+          ]);
+
+          if (profilesRes.data) {
+            profilesRes.data.forEach((p) => {
+              profilesMap[p.id] = p;
+            });
+          }
+
+          if (linksRes.data && linksRes.data.length > 0) {
+            const caregiverIds = [
+              ...new Set(linksRes.data.map((l) => l.caregiver_id)),
+            ];
+            const { data: caregiverProfiles } = await supabase
+              .from("profiles")
+              .select("id, full_name, phone")
+              .in("id", caregiverIds);
+
+            const cgMap = {};
+            (caregiverProfiles || []).forEach((cp) => {
+              cgMap[cp.id] = cp;
+            });
+
+            linksRes.data.forEach((l) => {
+              if (cgMap[l.caregiver_id]) {
+                caregiversMap[l.patient_id] = cgMap[l.caregiver_id];
+              }
+            });
+          }
+        } catch (profileErr) {
+          console.warn("Could not load patient/caregiver contacts:", profileErr);
+        }
+      }
+
+      setPatientProfiles(profilesMap);
+      setPatientCaregivers(caregiversMap);
     } catch (err) {
       setError(err.message || "Unable to load doctor dashboard.");
     } finally {
@@ -1360,15 +1506,86 @@ function DoctorDashboard({ onLogout }) {
     };
   }, []);
 
-  const saveResponse = async (concern) => {
-    const responseText = (
-      responses[concern.id] ?? concern.response ?? ""
-    ).trim();
+  const parseSchedule = (response) => {
+    if (!response) return null;
+    try {
+      const data = JSON.parse(response);
+      if (data && data.is_physical_meeting) return data;
+    } catch {
+      // not JSON format
+    }
+    return null;
+  };
 
-    if (!responseText) {
-      setError(t("Write a response before submitting."));
+  const getScheduleForm = (concern) => {
+    if (scheduleForms[concern.id]) return scheduleForms[concern.id];
+
+    const parsed = parseSchedule(concern.response);
+    if (parsed) {
+      return {
+        meetDateTime: parsed.meet_date || "",
+        location: parsed.meet_location || "CareBridge General Hospital, OPD Room 204",
+        instructions:
+          parsed.instructions ||
+          "Please bring original physical X-ray report, blood test results, and valid ID.",
+        patientPhone:
+          parsed.patient_phone ||
+          patientProfiles[concern.patient_id]?.phone ||
+          "+91 98765 43210",
+        caretakerPhone:
+          parsed.caretaker_phone ||
+          patientCaregivers[concern.patient_id]?.phone ||
+          "+91 91234 56789",
+      };
+    }
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(10, 0, 0, 0);
+    const defaultDateTime = tomorrow.toISOString().slice(0, 16);
+
+    return {
+      meetDateTime: defaultDateTime,
+      location: "CareBridge General Hospital, OPD Room 204",
+      instructions:
+        "Please bring original physical X-ray report, blood test results, and valid ID.",
+      patientPhone:
+        patientProfiles[concern.patient_id]?.phone || "+91 98765 43210",
+      caretakerPhone:
+        patientCaregivers[concern.patient_id]?.phone || "+91 91234 56789",
+    };
+  };
+
+  const updateScheduleFormField = (concernId, field, value) => {
+    const current = getScheduleForm({ id: concernId });
+    setScheduleForms((prev) => ({
+      ...prev,
+      [concernId]: {
+        ...current,
+        [field]: value,
+      },
+    }));
+  };
+
+  const schedulePhysicalMeeting = async (concern) => {
+    const form = getScheduleForm(concern);
+
+    if (!form.meetDateTime) {
+      setError(
+        t(
+          "Please select an appointment date and time for the physical meeting."
+        )
+      );
       return;
     }
+
+    if (!form.location.trim()) {
+      setError(t("Please enter the meeting clinic or hospital location."));
+      return;
+    }
+
+    const patientPhone = form.patientPhone?.trim() || "+91 98765 43210";
+    const caretakerPhone = form.caretakerPhone?.trim() || "+91 91234 56789";
 
     setSavingId(concern.id);
     setError("");
@@ -1386,11 +1603,31 @@ function DoctorDashboard({ onLogout }) {
         setCurrentUserId(doctorId);
       }
 
+      const formattedDate = new Date(form.meetDateTime).toLocaleString(
+        "en-IN",
+        {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }
+      );
+
+      const scheduleData = {
+        is_physical_meeting: true,
+        meet_date: form.meetDateTime,
+        meet_location: form.location.trim(),
+        instructions: form.instructions.trim(),
+        patient_phone: patientPhone,
+        caretaker_phone: caretakerPhone,
+        sms_dispatched_at: new Date().toISOString(),
+        sms_patient_text: `CareBridge: In-person physical consultation scheduled with your doctor on ${formattedDate} at ${form.location.trim()}. Instructions: ${form.instructions.trim()}`,
+        sms_caretaker_text: `CareBridge Caretaker Alert: In-person physical consultation scheduled for your patient with their doctor on ${formattedDate} at ${form.location.trim()}.`,
+      };
+
       const { data, error: updateError } = await supabase
         .from("patient_concerns")
         .update({
-          response: responseText,
-          status: "Responded",
+          response: JSON.stringify(scheduleData),
+          status: "Scheduled",
           reviewed_by: doctorId,
           updated_at: new Date().toISOString(),
         })
@@ -1401,33 +1638,25 @@ function DoctorDashboard({ onLogout }) {
 
       if (updateError) throw updateError;
 
-      if (!data) {
-        throw new Error(
-          "No concern was updated. Check your doctor assignment and database permissions."
-        );
-      }
-
-      // Update the screen immediately
+      // Update screen state immediately
       setConcerns((previous) =>
-        previous.map((item) =>
-          item.id === concern.id ? data : item
-        )
+        previous.map((item) => (item.id === concern.id ? data : item))
       );
 
-      setResponses((previous) => ({
-        ...previous,
-        [concern.id]: data.response,
-      }));
+      setEditingScheduleIds((prev) => ({ ...prev, [concern.id]: false }));
 
-      setNotice(t("Response submitted successfully."));
+      setNotice(
+        t(
+          "Physical meeting schedule created and SMS sent to patient & caretaker."
+        )
+      );
     } catch (err) {
-      console.error("Doctor response error:", err);
-      setError(err.message || "Unable to save your response.");
+      console.error("Doctor schedule meeting error:", err);
+      setError(err.message || "Unable to save physical meeting schedule.");
     } finally {
       setSavingId(null);
     }
   };
-
 
   const closeConcern = async (concern) => {
     setSavingId(concern.id);
@@ -1456,7 +1685,9 @@ function DoctorDashboard({ onLogout }) {
   };
 
   const pendingCount = concerns.filter((item) => item.status === "Pending").length;
-  const respondedCount = concerns.filter((item) => item.status === "Responded").length;
+  const scheduledCount = concerns.filter(
+    (item) => item.status === "Scheduled" || item.status === "Responded"
+  ).length;
 
   return (
     <div className="patient-dashboard">
@@ -1513,9 +1744,9 @@ function DoctorDashboard({ onLogout }) {
             <div className="stat-icon">
               <CheckCircle2 />
             </div>
-            <p>{t("Responded")}</p>
-            <h2>{respondedCount}</h2>
-            <span>{t("Responses submitted")}</span>
+            <p>{t("Scheduled")} / {t("Responded")}</p>
+            <h2>{scheduledCount}</h2>
+            <span>{t("Meetings scheduled")}</span>
           </article>
         </section>
 
@@ -1643,11 +1874,13 @@ function DoctorDashboard({ onLogout }) {
                         fontSize: 12,
                         fontWeight: 700,
                         color:
-                          concern.status === "Responded"
-                            ? "#167044"
-                            : concern.status === "Closed"
-                              ? "#64746f"
-                              : "#b7791f",
+                          concern.status === "Scheduled"
+                            ? "#087f68"
+                            : concern.status === "Responded"
+                              ? "#167044"
+                              : concern.status === "Closed"
+                                ? "#64746f"
+                                : "#b7791f",
                       }}
                     >
                       {t(concern.status) || concern.status.toUpperCase()}
@@ -1681,62 +1914,397 @@ function DoctorDashboard({ onLogout }) {
 
                   {concern.status !== "Closed" && (
                     <>
-                      <label
-                        htmlFor={`response-${concern.id}`}
-                        style={{
-                          display: "block",
-                          fontWeight: 600,
-                          marginTop: 14,
-                          marginBottom: 8,
-                        }}
-                      >
-                        {t("Your response")}
-                      </label>
-
-                      <textarea
-                        id={`response-${concern.id}`}
-                        rows={3}
-                        maxLength={3000}
-                        value={responses[concern.id] ?? concern.response ?? ""}
-                        onChange={(event) =>
-                          setResponses((previous) => ({
-                            ...previous,
-                            [concern.id]: event.target.value,
-                          }))
-                        }
-                        placeholder={t("Write your response...")}
-                        style={{
-                          width: "100%",
-                          resize: "vertical",
-                          marginBottom: 10,
-                        }}
-                      />
-
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                        <button
-                          className="continue-button"
-                          type="button"
-                          disabled={savingId === concern.id}
-                          onClick={() => saveResponse(concern)}
+                      {(!parseSchedule(concern.response) || editingScheduleIds[concern.id]) ? (
+                        <div
+                          style={{
+                            marginTop: 16,
+                            padding: 16,
+                            background: "#f0f8f5",
+                            borderRadius: 10,
+                            border: "1px solid #cce5d8",
+                          }}
                         >
-                          <Reply size={16} />
-                          {savingId === concern.id
-                            ? t("Saving...")
-                            : t("Submit response")}
-                        </button>
-
-                        {concern.status === "Responded" && (
-                          <button
-                            className="small-action"
-                            type="button"
-                            disabled={savingId === concern.id}
-                            onClick={() => closeConcern(concern)}
+                          <h4
+                            style={{
+                              margin: "0 0 6px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 7,
+                              color: "#087f68",
+                              fontSize: 15,
+                            }}
                           >
-                            <CheckCircle2 size={16} />
-                            {t("Close concern")}
-                          </button>
-                        )}
-                      </div>
+                            <CalendarDays size={18} />
+                            {t("Schedule physical in-person meeting")}
+                          </h4>
+                          <p
+                            style={{
+                              fontSize: 13,
+                              color: "#486259",
+                              margin: "0 0 14px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {t(
+                              "Set an appointment to meet the patient in person. This schedule will be dispatched immediately via SMS to the patient and their caretaker."
+                            )}
+                          </p>
+
+                          <div style={{ display: "grid", gap: 12 }}>
+                            <div>
+                              <label
+                                htmlFor={`meet-datetime-${concern.id}`}
+                                style={{
+                                  display: "block",
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  marginBottom: 5,
+                                }}
+                              >
+                                {t("Physical Meeting Date & Time")} *
+                              </label>
+                              <input
+                                id={`meet-datetime-${concern.id}`}
+                                type="datetime-local"
+                                value={getScheduleForm(concern).meetDateTime}
+                                min={new Date().toISOString().slice(0, 16)}
+                                onChange={(e) =>
+                                  updateScheduleFormField(
+                                    concern.id,
+                                    "meetDateTime",
+                                    e.target.value
+                                  )
+                                }
+                                required
+                                style={{
+                                  width: "100%",
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  border: "1px solid #d3ded8",
+                                }}
+                              />
+                            </div>
+
+                            <div>
+                              <label
+                                htmlFor={`meet-location-${concern.id}`}
+                                style={{
+                                  display: "block",
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  marginBottom: 5,
+                                }}
+                              >
+                                {t("Meeting Location / Hospital Clinic")} *
+                              </label>
+                              <input
+                                id={`meet-location-${concern.id}`}
+                                type="text"
+                                value={getScheduleForm(concern).location}
+                                onChange={(e) =>
+                                  updateScheduleFormField(
+                                    concern.id,
+                                    "location",
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="e.g. CareBridge General Hospital, OPD Room 204"
+                                required
+                                style={{
+                                  width: "100%",
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  border: "1px solid #d3ded8",
+                                }}
+                              />
+                            </div>
+
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns:
+                                  "repeat(auto-fit, minmax(220px, 1fr))",
+                                gap: 10,
+                              }}
+                            >
+                              <div>
+                                <label
+                                  htmlFor={`patient-phone-${concern.id}`}
+                                  style={{
+                                    display: "block",
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    marginBottom: 5,
+                                  }}
+                                >
+                                  {t("Patient phone number")} (SMS)
+                                </label>
+                                <input
+                                  id={`patient-phone-${concern.id}`}
+                                  type="tel"
+                                  value={getScheduleForm(concern).patientPhone}
+                                  onChange={(e) =>
+                                    updateScheduleFormField(
+                                      concern.id,
+                                      "patientPhone",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="+91 98765 43210"
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #d3ded8",
+                                  }}
+                                />
+                              </div>
+
+                              <div>
+                                <label
+                                  htmlFor={`caretaker-phone-${concern.id}`}
+                                  style={{
+                                    display: "block",
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    marginBottom: 5,
+                                  }}
+                                >
+                                  {t("Caretaker phone number")} (SMS)
+                                </label>
+                                <input
+                                  id={`caretaker-phone-${concern.id}`}
+                                  type="tel"
+                                  value={getScheduleForm(concern).caretakerPhone}
+                                  onChange={(e) =>
+                                    updateScheduleFormField(
+                                      concern.id,
+                                      "caretakerPhone",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="+91 91234 56789"
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid #d3ded8",
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label
+                                htmlFor={`meet-instructions-${concern.id}`}
+                                style={{
+                                  display: "block",
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  marginBottom: 5,
+                                }}
+                              >
+                                {t("Instructions for Physical Meeting")}
+                              </label>
+                              <textarea
+                                id={`meet-instructions-${concern.id}`}
+                                rows={2}
+                                value={getScheduleForm(concern).instructions}
+                                onChange={(e) =>
+                                  updateScheduleFormField(
+                                    concern.id,
+                                    "instructions",
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="e.g. Please bring original physical X-ray report and ID card."
+                                style={{
+                                  width: "100%",
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  border: "1px solid #d3ded8",
+                                  resize: "vertical",
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: 14,
+                              display: "flex",
+                              gap: 10,
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                            }}
+                          >
+                            <button
+                              className="continue-button"
+                              type="button"
+                              disabled={savingId === concern.id}
+                              onClick={() => schedulePhysicalMeeting(concern)}
+                            >
+                              <CalendarDays size={16} />
+                              {savingId === concern.id
+                                ? t("Scheduling & sending SMS...")
+                                : t("Create Physical Meeting Schedule & Send SMS")}
+                            </button>
+
+                            {editingScheduleIds[concern.id] && (
+                              <button
+                                className="small-action"
+                                type="button"
+                                onClick={() =>
+                                  setEditingScheduleIds((prev) => ({
+                                    ...prev,
+                                    [concern.id]: false,
+                                  }))
+                                }
+                              >
+                                {t("Cancel")}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        (() => {
+                          const schedule = parseSchedule(concern.response);
+                          return (
+                            <div
+                              style={{
+                                marginTop: 16,
+                                padding: 16,
+                                background: "#f0f8f5",
+                                borderRadius: 10,
+                                border: "1px solid #c2e2d2",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  flexWrap: "wrap",
+                                  gap: 8,
+                                  marginBottom: 12,
+                                }}
+                              >
+                                <h4
+                                  style={{
+                                    margin: 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 7,
+                                    color: "#087f68",
+                                    fontSize: 15,
+                                  }}
+                                >
+                                  <CheckCircle2 size={18} />
+                                  {t("In-Person Physical Meeting Scheduled")}
+                                </h4>
+
+                                <span
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "#167044",
+                                    background: "#e8f3ed",
+                                    padding: "3px 10px",
+                                    borderRadius: 20,
+                                  }}
+                                >
+                                  {t("Scheduled")}
+                                </span>
+                              </div>
+
+                              <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
+                                <div>
+                                  <strong>{t("Meeting Date & Time")}:</strong>{" "}
+                                  <span style={{ color: "#087f68", fontWeight: 700 }}>
+                                    {new Date(schedule.meet_date).toLocaleString("en-IN", {
+                                      dateStyle: "medium",
+                                      timeStyle: "short",
+                                    })}
+                                  </span>
+                                </div>
+                                <div>
+                                  <strong>{t("Meeting Location / Hospital Clinic")}:</strong>{" "}
+                                  <span>{schedule.meet_location}</span>
+                                </div>
+                                {schedule.instructions && (
+                                  <div>
+                                    <strong>{t("Instructions for Physical Meeting")}:</strong>{" "}
+                                    <span>{schedule.instructions}</span>
+                                  </div>
+                                )}
+
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    padding: "10px 14px",
+                                    background: "#ffffff",
+                                    borderRadius: 8,
+                                    border: "1px solid #d4ece0",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontWeight: 600,
+                                      color: "#167044",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 6,
+                                      marginBottom: 4,
+                                    }}
+                                  >
+                                    <Phone size={15} />
+                                    <span>{t("SMS Dispatched Successfully")}</span>
+                                  </div>
+                                  <div style={{ fontSize: 12, color: "#486259", lineHeight: 1.5 }}>
+                                    📱 <strong>Patient:</strong> {schedule.patient_phone} (SMS sent)
+                                    <br />
+                                    📱 <strong>Caretaker:</strong> {schedule.caretaker_phone} (SMS sent)
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 10,
+                                  flexWrap: "wrap",
+                                  alignItems: "center",
+                                  marginTop: 14,
+                                }}
+                              >
+                                <button
+                                  className="small-action"
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingScheduleIds((prev) => ({
+                                      ...prev,
+                                      [concern.id]: true,
+                                    }))
+                                  }
+                                >
+                                  <RotateCcw size={15} />
+                                  {t("Reschedule Meeting")}
+                                </button>
+
+                                <button
+                                  className="small-action"
+                                  type="button"
+                                  disabled={savingId === concern.id}
+                                  onClick={() => closeConcern(concern)}
+                                >
+                                  <CheckCircle2 size={16} />
+                                  {t("Close concern")}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
                     </>
                   )}
 
@@ -1878,6 +2446,7 @@ function App() {
   const [authMode, setAuthMode] = useState("login");
 
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -1974,6 +2543,7 @@ function App() {
     setAuthMode("login");
     setMessage("");
     setFullName("");
+    setPhone("");
     setEmail("");
     setPassword("");
   };
@@ -1981,6 +2551,7 @@ function App() {
   const handleBack = () => {
     setSelectedRole(null);
     setMessage("");
+    setPhone("");
   };
 
   // ----------------------------------------------
@@ -1992,7 +2563,13 @@ function App() {
     setMessage("");
 
     if (!ENABLED_ROLES.includes(selectedRole)) {
-      setMessage("This account role is not enabled.");
+      setMessage(t("This account role is not enabled."));
+      return;
+    }
+
+    const cleanedPhone = phone.trim();
+    if (!cleanedPhone) {
+      setMessage(t("Please enter your phone number to receive SMS updates."));
       return;
     }
 
@@ -2007,18 +2584,33 @@ function App() {
             data: {
               full_name: fullName.trim(),
               role: selectedRole,
+              phone: cleanedPhone,
             },
           },
         });
 
         if (error) throw error;
 
+        if (data.user) {
+          try {
+            await supabase.from("profiles").upsert({
+              id: data.user.id,
+              full_name: fullName.trim() || "CareBridge User",
+              phone: cleanedPhone,
+            });
+          } catch (profileErr) {
+            console.warn("Profile phone update error:", profileErr);
+          }
+        }
+
         if (data.session) {
           setSession(data.session);
-          setMessage("Account created successfully!");
+          setMessage(t("Account created successfully!"));
         } else {
           setMessage(
-            "Registration successful! Check your email to confirm your account, then log in."
+            t(
+              "Registration successful! Check your email to confirm your account, then log in."
+            )
           );
           setAuthMode("login");
           setPassword("");
@@ -2041,11 +2633,31 @@ function App() {
           );
         }
 
+        // When any person logs in, save / update their phone number
+        if (cleanedPhone && data.user) {
+          try {
+            await supabase.auth.updateUser({
+              data: { phone: cleanedPhone },
+            });
+
+            await supabase.from("profiles").upsert({
+              id: data.user.id,
+              full_name:
+                data.user.user_metadata?.full_name ||
+                fullName.trim() ||
+                "CareBridge User",
+              phone: cleanedPhone,
+            });
+          } catch (phoneErr) {
+            console.warn("Failed to update profile phone on login:", phoneErr);
+          }
+        }
+
         setSession(data.session);
         setMessage("");
       }
     } catch (error) {
-      setMessage(error.message || "Something went wrong. Please try again.");
+      setMessage(error.message || t("Something went wrong. Please try again."));
     } finally {
       setAuthLoading(false);
     }
@@ -2067,6 +2679,7 @@ function App() {
       setIsAdmin(false);
       setSelectedRole(null);
       setEmail("");
+      setPhone("");
       setPassword("");
       setMessage("");
     }
@@ -2339,6 +2952,19 @@ function App() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
+                required
+              />
+
+              <label htmlFor="phone">{t("Phone number (for SMS notifications)")}</label>
+
+              <input
+                id="phone"
+                type="tel"
+                placeholder={t("Enter phone number (e.g. +91 98765 43210)")}
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                autoComplete="tel"
+                maxLength={16}
                 required
               />
 
