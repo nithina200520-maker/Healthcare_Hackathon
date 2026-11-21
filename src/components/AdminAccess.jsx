@@ -1,0 +1,548 @@
+
+import { useEffect, useState } from "react";
+import {
+  HeartPulse,
+  ShieldCheck,
+  Users,
+  UserRound,
+  RefreshCw,
+  LogOut,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ShieldAlert,
+  UserPlus,
+  ClipboardList,
+  Hospital,
+  Stethoscope,
+  HandHeart,
+} from "lucide-react";
+import { supabase } from "../lib/supabase";
+
+const ROLES = ["Doctor", "Nurse", "Hospital", "Volunteer"];
+
+const TABLES = {
+  Doctor: {
+    table: "doctor_patient_links",
+    professionalColumn: "doctor_id",
+  },
+  Nurse: {
+    table: "nurse_patient_links",
+    professionalColumn: "nurse_id",
+  },
+  Hospital: {
+    table: "hospital_patient_links",
+    professionalColumn: "hospital_id",
+  },
+};
+
+export default function AdminAccess({ onLogout }) {
+  const [loading, setLoading] = useState(true);
+  const [admin, setAdmin] = useState(null);
+  const [requests, setRequests] = useState([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [processingId, setProcessingId] = useState(null);
+  const [filter, setFilter] = useState("Pending");
+
+  const [users, setUsers] = useState([]);
+  const [assignments, setAssignments] = useState({
+    Doctor: [],
+    Nurse: [],
+    Hospital: [],
+    Volunteer: [],
+  });
+
+  const [selectedRole, setSelectedRole] = useState("Doctor");
+  const [professionalId, setProfessionalId] = useState("");
+  const [patientId, setPatientId] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("Please log in again.");
+
+      const { data: adminData, error: adminError } = await supabase
+        .from("authorized_admins")
+        .select("admin_id, admin_name")
+        .eq("admin_id", user.id)
+        .maybeSingle();
+
+      if (adminError) throw adminError;
+      if (!adminData) {
+        setAdmin(null);
+        setRequests([]);
+        return;
+      }
+
+      setAdmin(adminData);
+
+      const { data: requestData, error: requestError } = await supabase
+        .from("account_requests")
+        .select("user_id, full_name, role, status, created_at")
+        .order("created_at", { ascending: false });
+
+      if (requestError) throw requestError;
+      setRequests(requestData || []);
+
+      const { data: userData, error: userError2 } =
+        await supabase.rpc("admin_list_assignment_users");
+
+      if (userError2) throw userError2;
+      setUsers(userData || []);
+
+      await loadAssignments();
+    } catch (err) {
+      setError(err.message || "Unable to load Admin Dashboard.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAssignments = async () => {
+    const results = {
+      Doctor: [],
+      Nurse: [],
+      Hospital: [],
+      Volunteer: [],
+    };
+
+    for (const role of ["Doctor", "Nurse", "Hospital"]) {
+      const config = TABLES[role];
+
+      const { data, error } = await supabase
+        .from(config.table)
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      results[role] = data || [];
+    }
+
+    const { data: volunteerData, error: volunteerError } = await supabase
+      .from("volunteer_tasks")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (volunteerError) throw volunteerError;
+
+    results.Volunteer = volunteerData || [];
+    setAssignments(results);
+  };
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const reviewRequest = async (userId, decision) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to ${decision.toLowerCase()} this account?`
+      )
+    ) return;
+
+    setProcessingId(userId);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error } = await supabase.rpc("review_account_request", {
+        p_user_id: userId,
+        p_decision: decision,
+      });
+
+      if (error) throw error;
+
+      setSuccess(`Account ${decision.toLowerCase()} successfully.`);
+      await loadDashboard();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const createAssignment = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!professionalId || !patientId) {
+      setError("Select both a professional and a patient.");
+      return;
+    }
+
+    setAssignmentLoading(true);
+
+    try {
+      let result;
+
+      if (selectedRole === "Volunteer") {
+        if (!taskDescription.trim()) {
+          throw new Error("Enter a volunteer task description.");
+        }
+
+        result = await supabase.rpc("admin_create_volunteer_task", {
+          p_volunteer_id: professionalId,
+          p_patient_id: patientId,
+          p_task_description: taskDescription.trim(),
+        });
+      } else {
+        result = await supabase.rpc("admin_create_assignment", {
+          p_role: selectedRole,
+          p_professional_id: professionalId,
+          p_patient_id: patientId,
+        });
+      }
+
+      if (result.error) throw result.error;
+
+      setSuccess(
+        selectedRole === "Volunteer"
+          ? "Volunteer task created successfully."
+          : `${selectedRole} assigned successfully.`
+      );
+
+      setProfessionalId("");
+      setPatientId("");
+      setTaskDescription("");
+
+      await loadAssignments();
+    } catch (err) {
+      setError(err.message || "Unable to create assignment.");
+    } finally {
+      setAssignmentLoading(false);
+    }
+  };
+
+  const pendingCount = requests.filter(
+    (r) => r.status === "Pending"
+  ).length;
+
+  const approvedCount = requests.filter(
+    (r) => r.status === "Approved"
+  ).length;
+
+  const rejectedCount = requests.filter(
+    (r) => r.status === "Rejected"
+  ).length;
+
+  const filteredRequests =
+    filter === "All"
+      ? requests
+      : requests.filter((r) => r.status === filter);
+
+  const professionals = users.filter(
+    (u) => u.role === selectedRole
+  );
+
+  const patients = users.filter((u) => u.role === "Patient");
+
+  const findName = (id) => {
+    const user = users.find((u) => u.user_id === id);
+    return user?.full_name || id;
+  };
+
+  return (
+    <div className="patient-dashboard">
+      <header className="dashboard-navbar">
+        <div className="brand">
+          <div className="brand-icon">
+            <HeartPulse size={24} />
+          </div>
+          <span>CareBridge</span>
+        </div>
+
+        <button className="logout-button" onClick={onLogout}>
+          <LogOut size={17} />
+          Logout
+        </button>
+      </header>
+
+      <main className="dashboard-content">
+        <section className="dashboard-welcome">
+          <div>
+            <p className="dashboard-eyebrow">ADMINISTRATION</p>
+            <h1>Welcome, {admin?.admin_name || "Administrator"}!</h1>
+            <p>Manage accounts, professional approvals and patient assignments.</p>
+          </div>
+          <div className="dashboard-profile-icon">
+            <ShieldCheck size={30} />
+          </div>
+        </section>
+
+        {error && (
+          <section className="dashboard-panel">
+            <p role="alert" style={{ color: "#b42318" }}>
+              <ShieldAlert size={17} /> {error}
+            </p>
+          </section>
+        )}
+
+        {success && (
+          <section className="dashboard-panel">
+            <p style={{ color: "#167044" }}>
+              <CheckCircle2 size={17} /> {success}
+            </p>
+          </section>
+        )}
+
+        {loading ? (
+          <section className="dashboard-panel">
+            Loading administrator dashboard...
+          </section>
+        ) : !admin ? (
+          <section className="dashboard-panel">
+            <h2>Administrator access required</h2>
+            <p>This account is not an authorized administrator.</p>
+          </section>
+        ) : (
+          <>
+            <section className="dashboard-stats">
+              <article className="stat-card">
+                <div className="stat-icon"><Clock /></div>
+                <p>Pending requests</p>
+                <h2>{pendingCount}</h2>
+                <span>Awaiting review</span>
+              </article>
+
+              <article className="stat-card">
+                <div className="stat-icon"><CheckCircle2 /></div>
+                <p>Approved</p>
+                <h2>{approvedCount}</h2>
+                <span>Authorized accounts</span>
+              </article>
+
+              <article className="stat-card">
+                <div className="stat-icon"><XCircle /></div>
+                <p>Rejected</p>
+                <h2>{rejectedCount}</h2>
+                <span>Declined requests</span>
+              </article>
+            </section>
+
+            {/* ACCOUNT APPROVALS */}
+            <section className="dashboard-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2><Users size={21} /> Account requests</h2>
+                  <p>Review professional registrations.</p>
+                </div>
+
+                <button
+                  className="small-action"
+                  type="button"
+                  onClick={loadDashboard}
+                  disabled={loading}
+                >
+                  <RefreshCw size={16} /> Refresh
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+                {["Pending", "Approved", "Rejected", "All"].map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={filter === status ? "continue-button" : "small-action"}
+                    onClick={() => setFilter(status)}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+
+              {filteredRequests.length === 0 ? (
+                <p>No requests found.</p>
+              ) : (
+                <div className="medicine-list">
+                  {filteredRequests.map((request) => (
+                    <article className="medicine-item" key={request.user_id} style={{ padding: 15, marginBottom: 12, border: "1px solid #e7ece9", borderRadius: 10, alignItems: "flex-start" }}>
+                      <div className="medicine-icon"><UserRound size={20} /></div>
+
+                      <div className="medicine-info" style={{ flex: 1 }}>
+                        <h3>{request.full_name || request.role}</h3>
+                        <p>Role: <strong>{request.role}</strong></p>
+                        <p style={{ fontSize: 12, overflowWrap: "anywhere" }}>User ID: {request.user_id}</p>
+                        <strong>{request.status.toUpperCase()}</strong>
+
+                        {request.status === "Pending" && (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                            <button className="continue-button" type="button" disabled={processingId === request.user_id} onClick={() => reviewRequest(request.user_id, "Approved")}>
+                              <CheckCircle2 size={16} /> Approve
+                            </button>
+                            <button className="small-action" type="button" disabled={processingId === request.user_id} onClick={() => reviewRequest(request.user_id, "Rejected")}>
+                              <XCircle size={16} /> Reject
+                            </button>
+                          </div>
+                        )}
+
+                        {processingId === request.user_id && <p>Processing...</p>}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* ASSIGNMENT MANAGER */}
+            <section className="dashboard-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2><UserPlus size={21} /> Patient assignment manager</h2>
+                  <p>Assign approved professionals to registered patients.</p>
+                </div>
+              </div>
+
+              <form onSubmit={createAssignment}>
+                <label>Professional role</label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => {
+                    setSelectedRole(e.target.value);
+                    setProfessionalId("");
+                    setPatientId("");
+                  }}
+                  style={fieldStyle}
+                >
+                  {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                </select>
+
+                <label>Choose {selectedRole}</label>
+                <select
+                  value={professionalId}
+                  onChange={(e) => setProfessionalId(e.target.value)}
+                  style={fieldStyle}
+                  required
+                >
+                  <option value="">Select {selectedRole}</option>
+                  {professionals.map((u) => (
+                    <option key={u.user_id} value={u.user_id}>
+                      {u.full_name} ({u.user_id.slice(0, 8)})
+                    </option>
+                  ))}
+                </select>
+
+                <label>Choose Patient</label>
+                <select
+                  value={patientId}
+                  onChange={(e) => setPatientId(e.target.value)}
+                  style={fieldStyle}
+                  required
+                >
+                  <option value="">Select Patient</option>
+                  {patients.map((u) => (
+                    <option key={u.user_id} value={u.user_id}>
+                      {u.full_name} ({u.user_id.slice(0, 8)})
+                    </option>
+                  ))}
+                </select>
+
+                {selectedRole === "Volunteer" && (
+                  <>
+                    <label>Task description</label>
+                    <textarea
+                      value={taskDescription}
+                      onChange={(e) => setTaskDescription(e.target.value)}
+                      placeholder="Describe the task for the volunteer..."
+                      required
+                      rows={3}
+                      style={fieldStyle}
+                    />
+                  </>
+                )}
+
+                <button className="continue-button" type="submit" disabled={assignmentLoading}>
+                  <UserPlus size={17} />
+                  {assignmentLoading ? "Creating..." : selectedRole === "Volunteer" ? "Create Volunteer Task" : "Create Assignment"}
+                </button>
+
+                {professionals.length === 0 && (
+                  <p style={{ color: "#b7791f", marginTop: 10 }}>
+                    No approved {selectedRole} accounts available.
+                  </p>
+                )}
+
+                {patients.length === 0 && (
+                  <p style={{ color: "#b7791f", marginTop: 10 }}>
+                    No registered Patient accounts available.
+                  </p>
+                )}
+              </form>
+            </section>
+
+            {/* ASSIGNMENT OVERVIEW */}
+            <section className="dashboard-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2><ClipboardList size={21} /> Assignment overview</h2>
+                  <p>Review existing professional assignments and volunteer tasks.</p>
+                </div>
+
+                <button className="small-action" type="button" onClick={loadAssignments}>
+                  <RefreshCw size={16} /> Refresh
+                </button>
+              </div>
+
+              {ROLES.map((role) => (
+                <div key={role} style={{ marginTop: 20 }}>
+                  <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {role === "Doctor" && <Stethoscope size={18} />}
+                    {role === "Nurse" && <HeartPulse size={18} />}
+                    {role === "Hospital" && <Hospital size={18} />}
+                    {role === "Volunteer" && <HandHeart size={18} />}
+                    {role} ({assignments[role].length})
+                  </h3>
+
+                  {assignments[role].length === 0 ? (
+                    <p style={{ color: "#64746f" }}>No records found.</p>
+                  ) : (
+                    assignments[role].map((item) => {
+                      const id = role === "Doctor" ? item.doctor_id :
+                        role === "Nurse" ? item.nurse_id :
+                        role === "Hospital" ? item.hospital_id :
+                        item.volunteer_id;
+
+                      return (
+                        <article key={item.id} className="medicine-item" style={{ padding: 12, marginBottom: 8, border: "1px solid #e7ece9", borderRadius: 10 }}>
+                          <div className="medicine-info" style={{ flex: 1 }}>
+                            <strong>{findName(id)}</strong>
+                            <p>Patient: {findName(item.patient_id)}</p>
+                            {role === "Volunteer" && <p>Task: {item.task_description}</p>}
+                            <p>Status: {role === "Volunteer" ? item.status : item.is_active ? "Active" : "Inactive"}</p>
+                          </div>
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
+              ))}
+            </section>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+const fieldStyle = {
+  width: "100%",
+  padding: "12px",
+  marginTop: "8px",
+  marginBottom: "16px",
+  border: "1px solid #d5dfda",
+  borderRadius: "8px",
+  fontSize: "14px",
+  background: "#fff",
+};

@@ -1,3 +1,5 @@
+import AdminAccess from "./components/AdminAccess";
+import VolunteerAccess from "./components/VolunteerAccess";
 import HospitalAccess from "./components/HospitalAccess";
 import { useEffect, useState } from "react";
 import PatientDashboard from "./components/PatientDashboard";
@@ -77,6 +79,7 @@ const ENABLED_ROLES = [
   "Nurse",
   "Doctor",
   "Hospital",
+  "Volunteer",
 ];
 
 // --------------------------------------------------
@@ -431,7 +434,9 @@ function ConnectionPanel({ role }) {
 // PATIENT DOCTOR COMMUNICATION
 // --------------------------------------------------
 
-function PatientConcernPanel() {
+function 
+
+PatientConcernPanel() {
   const [assignments, setAssignments] = useState([]);
   const [concerns, setConcerns] = useState([]);
   const [selectedDoctor, setSelectedDoctor] = useState("");
@@ -1845,10 +1850,16 @@ function DoctorAccess({ onLogout }) {
 // MAIN APP
 // --------------------------------------------------
 
+ // --------------------------------------------------
+ // MAIN APP
+ // --------------------------------------------------
+
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminChecking, setAdminChecking] = useState(true);
 
   const [selectedRole, setSelectedRole] = useState(null);
   const [language, setLanguage] = useState("English");
@@ -1858,6 +1869,10 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+
+  // ----------------------------------------------
+  // AUTHENTICATION SESSION
+  // ----------------------------------------------
 
   useEffect(() => {
     let mounted = true;
@@ -1883,6 +1898,58 @@ function App() {
     };
   }, []);
 
+  // ----------------------------------------------
+  // ADMIN AUTHORIZATION CHECK
+  // ----------------------------------------------
+
+  useEffect(() => {
+    let active = true;
+
+    const checkAdmin = async () => {
+      setAdminChecking(true);
+      setIsAdmin(false);
+
+      if (!session?.user?.id) {
+        setAdminChecking(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("authorized_admins")
+          .select("admin_id")
+          .eq("admin_id", session.user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (active) {
+          setIsAdmin(Boolean(data));
+        }
+      } catch (error) {
+        console.error("Admin verification failed:", error.message);
+
+        if (active) {
+          setIsAdmin(false);
+        }
+      } finally {
+        if (active) {
+          setAdminChecking(false);
+        }
+      }
+    };
+
+    checkAdmin();
+
+    return () => {
+      active = false;
+    };
+  }, [session?.user?.id]);
+
+  // ----------------------------------------------
+  // ROLE SELECTION
+  // ----------------------------------------------
+
   const handleRoleSelect = (role) => {
     if (!ENABLED_ROLES.includes(role)) {
       setMessage(
@@ -1903,6 +1970,10 @@ function App() {
     setSelectedRole(null);
     setMessage("");
   };
+
+  // ----------------------------------------------
+  // LOGIN / REGISTRATION
+  // ----------------------------------------------
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -1968,6 +2039,10 @@ function App() {
     }
   };
 
+  // ----------------------------------------------
+  // LOGOUT
+  // ----------------------------------------------
+
   const handleLogout = async () => {
     setAuthLoading(true);
 
@@ -1977,6 +2052,7 @@ function App() {
       setMessage(error.message);
     } else {
       setSession(null);
+      setIsAdmin(false);
       setSelectedRole(null);
       setEmail("");
       setPassword("");
@@ -1985,6 +2061,10 @@ function App() {
 
     setAuthLoading(false);
   };
+
+  // ----------------------------------------------
+  // INITIAL LOADING
+  // ----------------------------------------------
 
   if (loading) {
     return (
@@ -1996,7 +2076,27 @@ function App() {
     );
   }
 
+  // ----------------------------------------------
+  // AUTHENTICATED DASHBOARD ROUTING
+  // ----------------------------------------------
+
   if (session) {
+    if (adminChecking) {
+      return (
+        <div className="app">
+          <main className="main-content">
+            <p>Verifying CareBridge administrator access...</p>
+          </main>
+        </div>
+      );
+    }
+
+    // Admin access is verified using authorized_admins,
+    // not the public registration role.
+    if (isAdmin) {
+      return <AdminAccess onLogout={handleLogout} />;
+    }
+
     const role = session.user.user_metadata?.role;
 
     if (role === "Patient") {
@@ -2004,7 +2104,12 @@ function App() {
     }
 
     if (role === "Caregiver") {
-      return <NotificationDashboard role="Caregiver" onLogout={handleLogout} />;
+      return (
+        <NotificationDashboard
+          role="Caregiver"
+          onLogout={handleLogout}
+        />
+      );
     }
 
     if (role === "Nurse") {
@@ -2014,9 +2119,14 @@ function App() {
     if (role === "Doctor") {
       return <DoctorAccess onLogout={handleLogout} />;
     }
+
     if (role === "Hospital") {
-  return <HospitalAccess onLogout={handleLogout} />;
-}
+      return <HospitalAccess onLogout={handleLogout} />;
+    }
+
+    if (role === "Volunteer") {
+      return <VolunteerAccess onLogout={handleLogout} />;
+    }
 
     return (
       <div className="app">
@@ -2026,6 +2136,7 @@ function App() {
             This account does not have an enabled dashboard. Contact the
             administrator.
           </p>
+
           <button
             className="continue-button"
             onClick={handleLogout}
@@ -2037,6 +2148,10 @@ function App() {
       </div>
     );
   }
+
+  // ----------------------------------------------
+  // PUBLIC LANDING PAGE
+  // ----------------------------------------------
 
   return (
     <div className="app">
@@ -2050,6 +2165,7 @@ function App() {
 
         <div className="language-select">
           <Globe size={17} />
+
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value)}
@@ -2125,9 +2241,14 @@ function App() {
 
                         {!enabled && <small>Coming soon</small>}
 
-                        {["Nurse", "Doctor", "Hospital"].includes(role.name) && (
-  <small>Administrator approval required</small>
-)}
+                        {[
+                          "Nurse",
+                          "Doctor",
+                          "Hospital",
+                          "Volunteer",
+                        ].includes(role.name) && (
+                          <small>Administrator approval required</small>
+                        )}
                       </div>
 
                       <ArrowRight className="role-arrow" size={19} />
@@ -2159,10 +2280,15 @@ function App() {
                 : `Create your CareBridge ${selectedRole.toLowerCase()} account.`}
             </p>
 
-           {["Nurse", "Doctor", "Hospital"].includes(selectedRole) && (
+            {[
+              "Nurse",
+              "Doctor",
+              "Hospital",
+              "Volunteer",
+            ].includes(selectedRole) && (
               <p className="demo-note">
-                {selectedRole} accounts require administrator approval before
-                dashboard access.
+                {selectedRole} accounts require administrator approval
+                before dashboard access.
               </p>
             )}
 
@@ -2194,6 +2320,7 @@ function App() {
               {authMode === "register" && (
                 <>
                   <label htmlFor="fullName">Full name</label>
+
                   <input
                     id="fullName"
                     type="text"
@@ -2208,6 +2335,7 @@ function App() {
               )}
 
               <label htmlFor="email">Email address</label>
+
               <input
                 id="email"
                 type="email"
@@ -2219,6 +2347,7 @@ function App() {
               />
 
               <label htmlFor="password">Password</label>
+
               <input
                 id="password"
                 type="password"
@@ -2226,7 +2355,9 @@ function App() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={
-                  authMode === "login" ? "current-password" : "new-password"
+                  authMode === "login"
+                    ? "current-password"
+                    : "new-password"
                 }
                 minLength={6}
                 required
@@ -2242,6 +2373,7 @@ function App() {
                   : authMode === "login"
                     ? "Continue"
                     : "Create account"}
+
                 {!authLoading && <ArrowRight size={18} />}
               </button>
             </form>
