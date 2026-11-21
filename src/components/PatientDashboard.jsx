@@ -15,6 +15,7 @@ import {
   LogOut,
   XCircle,
   X,
+  TrendingUp,
 } from "lucide-react";
 
 function formatTime(time) {
@@ -23,6 +24,47 @@ function formatTime(time) {
   const period = hour >= 12 ? "PM" : "AM";
 
   return `${hour % 12 || 12}:${minutes} ${period}`;
+}
+
+function getDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getScheduledDateTime(date, time) {
+  const [hours, minutes] = time.split(":").map(Number);
+
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    hours,
+    minutes
+  ).toISOString();
+}
+
+function getDateRange() {
+  const today = new Date();
+
+  const start = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() - 6
+  );
+
+  const end = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() + 1
+  );
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
 }
 
 function getTodayRange() {
@@ -46,21 +88,24 @@ function getTodayRange() {
   };
 }
 
-function getScheduledDateTime(time) {
-  const now = new Date();
-  const [hours, minutes] = time.split(":").map(Number);
-
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    hours,
-    minutes
-  ).toISOString();
+function getEmptyDay(date) {
+  return {
+    date: getDateKey(date),
+    label: date.toLocaleDateString("en-IN", {
+      weekday: "short",
+    }),
+    taken: 0,
+    missed: 0,
+    skipped: 0,
+    pending: 0,
+    total: 0,
+    percentage: 0,
+  };
 }
 
 function PatientDashboard({ onLogout }) {
   const [medicines, setMedicines] = useState([]);
+  const [weeklyStats, setWeeklyStats] = useState([]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMedicineName, setNewMedicineName] = useState("");
@@ -89,9 +134,39 @@ function PatientDashboard({ onLogout }) {
       medicine.status === "Upcoming"
   ).length;
 
-  // Load medicines and today's dose logs
+  const weeklyTotal = weeklyStats.reduce(
+    (total, day) => total + day.total,
+    0
+  );
+
+  const weeklyTaken = weeklyStats.reduce(
+    (total, day) => total + day.taken,
+    0
+  );
+
+  const weeklyMissed = weeklyStats.reduce(
+    (total, day) => total + day.missed,
+    0
+  );
+
+  const weeklySkipped = weeklyStats.reduce(
+    (total, day) => total + day.skipped,
+    0
+  );
+
+  const weeklyPending = weeklyStats.reduce(
+    (total, day) => total + day.pending,
+    0
+  );
+
+  const weeklyPercentage =
+    weeklyTotal > 0
+      ? Math.round((weeklyTaken / weeklyTotal) * 100)
+      : 0;
+
+  // Load medicines and seven days of dose logs
   useEffect(() => {
-    async function loadMedicines() {
+    async function loadDashboard() {
       setLoading(true);
       setError("");
 
@@ -107,14 +182,14 @@ function PatientDashboard({ onLogout }) {
         const { data: medicineData, error: medicineError } =
           await supabase
             .from("medicines")
-            .select("id, name, scheduled_time")
+            .select("id, name, scheduled_time, created_at")
             .eq("patient_id", user.id)
             .eq("is_active", true)
             .order("scheduled_time");
 
         if (medicineError) throw medicineError;
 
-        const { start, end } = getTodayRange();
+        const { start, end } = getDateRange();
 
         const fetchLogs = async () => {
           const { data, error } = await supabase
@@ -132,16 +207,20 @@ function PatientDashboard({ onLogout }) {
         let logData = await fetchLogs();
 
         const now = Date.now();
+        const today = new Date();
+
         const missedLogs = [];
 
-        // Find doses that passed their 30-minute grace period
+        // Automatically create today's missed-dose records
         for (const medicine of medicineData || []) {
           const scheduledFor = getScheduledDateTime(
+            today,
             medicine.scheduled_time.slice(0, 5)
           );
 
-          const scheduledTimestamp =
-            new Date(scheduledFor).getTime();
+          const scheduledTimestamp = new Date(
+            scheduledFor
+          ).getTime();
 
           const alreadyLogged = logData.some(
             (log) =>
@@ -163,7 +242,6 @@ function PatientDashboard({ onLogout }) {
           }
         }
 
-        // Save missed doses without creating duplicates
         if (missedLogs.length > 0) {
           const { error: insertError } = await supabase
             .from("dose_logs")
@@ -178,15 +256,17 @@ function PatientDashboard({ onLogout }) {
           logData = await fetchLogs();
         }
 
-        // Prepare dashboard data
+        // Prepare today's medicine list
         const updatedMedicines = (medicineData || []).map(
           (medicine) => {
             const scheduledFor = getScheduledDateTime(
+              today,
               medicine.scheduled_time.slice(0, 5)
             );
 
-            const scheduledTimestamp =
-              new Date(scheduledFor).getTime();
+            const scheduledTimestamp = new Date(
+              scheduledFor
+            ).getTime();
 
             const log = logData.find(
               (item) =>
@@ -210,20 +290,102 @@ function PatientDashboard({ onLogout }) {
               id: medicine.id,
               name: medicine.name,
               time: medicine.scheduled_time.slice(0, 5),
+              created_at: medicine.created_at,
               status,
             };
           }
         );
 
         setMedicines(updatedMedicines);
+
+        // Calculate seven-day adherence
+        const days = [];
+
+        for (let offset = 6; offset >= 0; offset--) {
+          const date = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            today.getDate() - offset
+          );
+
+          const day = getEmptyDay(date);
+          const dateKey = getDateKey(date);
+
+          for (const medicine of medicineData || []) {
+            // Do not count a medicine on days before it was created
+            if (
+              medicine.created_at &&
+              new Date(medicine.created_at) >
+                new Date(
+                  date.getFullYear(),
+                  date.getMonth(),
+                  date.getDate(),
+                  23,
+                  59,
+                  59,
+                  999
+                )
+            ) {
+              continue;
+            }
+
+            const scheduledFor = getScheduledDateTime(
+              date,
+              medicine.scheduled_time.slice(0, 5)
+            );
+
+            const scheduledTimestamp = new Date(
+              scheduledFor
+            ).getTime();
+
+            // Exclude doses that have not become due yet
+            if (scheduledTimestamp > now) {
+              continue;
+            }
+
+            const log = logData.find(
+              (item) =>
+                item.medicine_id === medicine.id &&
+                new Date(item.scheduled_for).getTime() ===
+                  scheduledTimestamp
+            );
+
+            day.total++;
+
+            if (log?.status === "Taken") {
+              day.taken++;
+            } else if (log?.status === "Skipped") {
+              day.skipped++;
+            } else if (log?.status === "Missed") {
+              day.missed++;
+            } else if (
+              now >= scheduledTimestamp + 30 * 60 * 1000
+            ) {
+              // Calculate an unlogged past dose as missed
+              // without inserting a historical database record
+              day.missed++;
+            } else {
+              day.pending++;
+            }
+          }
+
+          day.percentage =
+            day.total > 0
+              ? Math.round((day.taken / day.total) * 100)
+              : 0;
+
+          days.push(day);
+        }
+
+        setWeeklyStats(days);
       } catch (err) {
-        setError(err.message || "Unable to load medicines.");
+        setError(err.message || "Unable to load dashboard.");
       } finally {
         setLoading(false);
       }
     }
 
-    loadMedicines();
+    loadDashboard();
   }, []);
 
   // Add a new medicine
@@ -253,7 +415,7 @@ function PatientDashboard({ onLogout }) {
           name,
           scheduled_time: newMedicineTime,
         })
-        .select("id, name, scheduled_time")
+        .select("id, name, scheduled_time, created_at")
         .single();
 
       if (insertError) throw insertError;
@@ -265,6 +427,7 @@ function PatientDashboard({ onLogout }) {
             id: data.id,
             name: data.name,
             time: data.scheduled_time.slice(0, 5),
+            created_at: data.created_at,
             status: "Upcoming",
           },
         ].sort((a, b) => a.time.localeCompare(b.time))
@@ -273,6 +436,9 @@ function PatientDashboard({ onLogout }) {
       setNewMedicineName("");
       setNewMedicineTime("08:00");
       setShowAddForm(false);
+
+      // Refresh weekly statistics after adding a medicine
+      window.location.reload();
     } catch (err) {
       setError(err.message || "Could not save medicine.");
     } finally {
@@ -304,7 +470,10 @@ function PatientDashboard({ onLogout }) {
       const log = {
         patient_id: user.id,
         medicine_id: medicine.id,
-        scheduled_for: getScheduledDateTime(medicine.time),
+        scheduled_for: getScheduledDateTime(
+          new Date(),
+          medicine.time
+        ),
         status,
         taken_at:
           status === "Taken"
@@ -312,7 +481,6 @@ function PatientDashboard({ onLogout }) {
             : null,
       };
 
-      // Update an existing Missed record or insert a new one
       const { error: logError } = await supabase
         .from("dose_logs")
         .upsert(log, {
@@ -329,6 +497,9 @@ function PatientDashboard({ onLogout }) {
             : item
         )
       );
+
+      // Reload to update weekly adherence statistics
+      window.location.reload();
     } catch (err) {
       setError(err.message || "Could not update dose status.");
     } finally {
@@ -367,6 +538,7 @@ function PatientDashboard({ onLogout }) {
           </div>
         </section>
 
+        {/* Today's summary */}
         <section className="dashboard-stats">
           <article className="stat-card">
             <div className="stat-icon"><Pill /></div>
@@ -414,6 +586,170 @@ function PatientDashboard({ onLogout }) {
           </p>
         )}
 
+        {/* Seven-day adherence dashboard */}
+        <section
+          className="dashboard-panel"
+          style={{ marginBottom: "24px" }}
+        >
+          <div className="panel-heading">
+            <div>
+              <h2>
+                <TrendingUp size={21} />
+                Weekly medicine adherence
+              </h2>
+              <p>Your medicine-taking progress over the last 7 days.</p>
+            </div>
+          </div>
+
+          {loading ? (
+            <p>Calculating your weekly progress...</p>
+          ) : (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                  gap: "12px",
+                  margin: "18px 0",
+                }}
+              >
+                <div style={summaryCardStyle}>
+                  <span style={summaryLabelStyle}>Adherence rate</span>
+                  <strong style={{ fontSize: "28px", color: "#087f68" }}>
+                    {weeklyPercentage}%
+                  </strong>
+                </div>
+
+                <div style={summaryCardStyle}>
+                  <span style={summaryLabelStyle}>Doses taken</span>
+                  <strong style={{ fontSize: "28px", color: "#087f68" }}>
+                    {weeklyTaken}
+                  </strong>
+                </div>
+
+                <div style={summaryCardStyle}>
+                  <span style={summaryLabelStyle}>Missed doses</span>
+                  <strong style={{ fontSize: "28px", color: "#b42318" }}>
+                    {weeklyMissed}
+                  </strong>
+                </div>
+
+                <div style={summaryCardStyle}>
+                  <span style={summaryLabelStyle}>Skipped doses</span>
+                  <strong style={{ fontSize: "28px", color: "#b7791f" }}>
+                    {weeklySkipped}
+                  </strong>
+                </div>
+              </div>
+
+              <div style={{ marginTop: "24px" }}>
+                <h3 style={{ fontSize: "16px", marginBottom: "16px" }}>
+                  Daily adherence
+                </h3>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                    gap: "8px",
+                    alignItems: "end",
+                    minHeight: "155px",
+                  }}
+                >
+                  {weeklyStats.map((day) => (
+                    <div
+                      key={day.date}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "7px",
+                        minWidth: 0,
+                      }}
+                    >
+                      <strong style={{ fontSize: "12px" }}>
+                        {day.total > 0 ? `${day.percentage}%` : "—"}
+                      </strong>
+
+                      <div
+                        style={{
+                          width: "100%",
+                          maxWidth: "42px",
+                          height: "100px",
+                          background: "#edf2f0",
+                          borderRadius: "8px",
+                          display: "flex",
+                          alignItems: "flex-end",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          title={`${day.taken} taken out of ${day.total} due doses`}
+                          style={{
+                            width: "100%",
+                            height: `${day.percentage}%`,
+                            minHeight:
+                              day.percentage > 0 ? "4px" : "0",
+                            background: "#087f68",
+                            borderRadius: "8px",
+                            transition: "height 0.3s ease",
+                          }}
+                        />
+                      </div>
+
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          color: "#64746f",
+                        }}
+                      >
+                        {day.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "16px",
+                  marginTop: "20px",
+                  fontSize: "13px",
+                  color: "#53635e",
+                }}
+              >
+                <span>🟢 Taken: {weeklyTaken}</span>
+                <span>🔴 Missed: {weeklyMissed}</span>
+                <span>🟠 Skipped: {weeklySkipped}</span>
+                <span>🟡 Pending: {weeklyPending}</span>
+              </div>
+
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "#77847f",
+                  marginTop: "16px",
+                  lineHeight: 1.5,
+                }}
+              >
+                Adherence rate = doses taken divided by doses due.
+                Future doses are excluded. Historical unlogged doses
+                after their grace period are counted as missed in
+                this report.
+              </p>
+
+              {weeklyTotal === 0 && (
+                <p style={{ color: "#64746f", marginTop: "12px" }}>
+                  No doses were due during this period yet.
+                </p>
+              )}
+            </>
+          )}
+        </section>
+
+        {/* Medicine schedule */}
         <section className="dashboard-panel">
           <div className="panel-heading">
             <div>
@@ -598,5 +934,20 @@ function PatientDashboard({ onLogout }) {
     </div>
   );
 }
+
+const summaryCardStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
+  padding: "16px",
+  background: "#f7fbfa",
+  border: "1px solid #e1ece8",
+  borderRadius: "12px",
+};
+
+const summaryLabelStyle = {
+  fontSize: "13px",
+  color: "#64746f",
+};
 
 export default PatientDashboard;
