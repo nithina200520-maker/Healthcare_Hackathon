@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import {
   HeartPulse,
   HandHeart,
-  Users,
   UserRound,
   RefreshCw,
   LogOut,
@@ -12,6 +11,7 @@ import {
   CheckCircle2,
   Circle,
   LoaderCircle,
+  XCircle,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
@@ -282,16 +282,35 @@ export default function VolunteerAccess({ onLogout }) {
                           style={{
                             fontSize: 12,
                             fontWeight: 600,
+                            padding: "3px 8px",
+                            borderRadius: 12,
+                            background:
+                              task.status === "Completed"
+                                ? "#e8f3ed"
+                                : task.status === "In Progress"
+                                ? "#fef3eb"
+                                : task.status === "Cancelled"
+                                ? "#fee4e2"
+                                : "#edf2f0",
                             color:
                               task.status === "Completed"
                                 ? "#167044"
                                 : task.status === "In Progress"
                                 ? "#b7791f"
+                                : task.status === "Cancelled"
+                                ? "#b42318"
                                 : "#64746f",
                           }}
                         >
                           {task.status.toUpperCase()}
                         </span>
+
+                        {task.status === "Cancelled" && (
+                          <p style={{ fontSize: 13, color: "#b42318", margin: "8px 0 0" }}>
+                            <XCircle size={14} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                            This task was cancelled by the administrator.
+                          </p>
+                        )}
 
                         <div
                           style={{

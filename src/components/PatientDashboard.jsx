@@ -67,27 +67,6 @@ function getDateRange() {
   };
 }
 
-function getTodayRange() {
-  const now = new Date();
-
-  const start = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
-
-  const end = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1
-  );
-
-  return {
-    start: start.toISOString(),
-    end: end.toISOString(),
-  };
-}
-
 function getEmptyDay(date) {
   return {
     date: getDateKey(date),
@@ -309,7 +288,6 @@ function PatientDashboard({ onLogout }) {
           );
 
           const day = getEmptyDay(date);
-          const dateKey = getDateKey(date);
 
           for (const medicine of medicineData || []) {
             // Do not count a medicine on days before it was created
@@ -908,19 +886,48 @@ function PatientDashboard({ onLogout }) {
           <h2>Quick actions</h2>
 
           <div className="quick-action-grid">
-            <button type="button">
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById("assigned-doctor");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth" });
+                  el.focus();
+                } else {
+                  alert("Please submit your question using the Doctor Communication panel above.");
+                }
+              }}
+            >
               <MessageCircle size={22} />
               <span>Contact doctor</span>
             </button>
 
-            <button type="button">
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById("concern-subject");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth" });
+                  el.focus();
+                } else {
+                  alert("Please submit your question using the Doctor Communication panel above.");
+                }
+              }}
+            >
               <AlertCircle size={22} />
               <span>Report a concern</span>
             </button>
 
-            <button type="button">
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Do you want to dial emergency services (112)?")) {
+                  window.open("tel:112", "_self");
+                }
+              }}
+            >
               <Phone size={22} />
-              <span>Emergency call</span>
+              <span>Emergency call (112)</span>
             </button>
           </div>
         </section>
