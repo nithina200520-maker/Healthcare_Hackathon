@@ -319,3 +319,60 @@ footer {
     font-size: 11px;
   }
 }
+
+/* Login and registration controls */
+
+.auth-tabs {
+  display: flex;
+  gap: 10px;
+  margin: 22px 0;
+  padding: 5px;
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+.auth-tabs button {
+  flex: 1;
+  padding: 11px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-tabs button.active {
+  background: white;
+  color: #0f766e;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+.login-section form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-section form label {
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.login-section form input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.demo-note {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
