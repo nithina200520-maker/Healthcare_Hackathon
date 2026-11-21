@@ -180,8 +180,8 @@ You MUST respond with valid JSON adhering strictly to this schema:
     let analysisResult: AnalysisResult;
 
     if (geminiKey) {
-      // Call Google Gemini API (gemini-2.0-flash or gemini-1.5-flash)
-      const model = "gemini-2.0-flash";
+      // Call Google Gemini API (gemini-3.8-flash)
+      const model = "gemini-3.8-flash";
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
 
       const geminiBody = {

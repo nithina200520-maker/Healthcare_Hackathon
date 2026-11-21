@@ -159,7 +159,7 @@ The `analyze-medical-report` function uses vision AI to analyze uploaded medical
 * **Features**:
   * Authenticates the caller and verifies ownership in `public.medical_reports`.
   * Fetches file from private Supabase Storage (`medical-reports`) or uses direct payload transmission.
-  * Calls **Google Gemini 2.0 Flash** (`gemini-2.0-flash`) with fallback to **OpenAI GPT-4o-mini** (`gpt-4o-mini`).
+  * Calls **Google Gemini 3.8 Flash** (`gemini-3.8-flash`) with fallback to **OpenAI GPT-4o-mini** (`gpt-4o-mini`).
   * Enforces medical safety rules: informational only, never prescribes or diagnoses, flags unreadable documents.
   * Returns structured JSON across 7 clinical sections:
     1. Report Type
