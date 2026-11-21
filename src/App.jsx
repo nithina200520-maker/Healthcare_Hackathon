@@ -24,6 +24,8 @@ import {
   UserPlus,
   Link2,
   XCircle,
+  Clock,
+  ShieldAlert,
 } from "lucide-react";
 
 import "./index.css";
@@ -61,7 +63,12 @@ const roles = [
   },
 ];
 
-// Patient-caregiver connection component
+const ENABLED_ROLES = ["Patient", "Caregiver", "Nurse"];
+
+// --------------------------------------------------
+// PATIENT / CAREGIVER CONNECTIONS
+// --------------------------------------------------
+
 function ConnectionPanel({ role }) {
   const [userId, setUserId] = useState("");
   const [connections, setConnections] = useState([]);
@@ -360,9 +367,7 @@ function ConnectionPanel({ role }) {
                 </div>
 
                 <div className="medicine-info" style={{ flex: 1 }}>
-                  <h3>
-                    {role === "Patient" ? "Caregiver" : "Patient"}
-                  </h3>
+                  <h3>{role === "Patient" ? "Caregiver" : "Patient"}</h3>
 
                   <p
                     style={{
@@ -432,7 +437,10 @@ function ConnectionPanel({ role }) {
   );
 }
 
-// Patient dashboard wrapper
+// --------------------------------------------------
+// PATIENT DASHBOARD
+// --------------------------------------------------
+
 function PatientHome({ onLogout }) {
   return (
     <>
@@ -447,19 +455,24 @@ function PatientHome({ onLogout }) {
   );
 }
 
-// Caregiver dashboard
-function CaregiverDashboard({ onLogout }) {
+// --------------------------------------------------
+// SHARED CAREGIVER / NURSE NOTIFICATION DASHBOARD
+// --------------------------------------------------
+
+function NotificationDashboard({ onLogout, role }) {
   const [notifications, setNotifications] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState("");
 
   const unreadCount = notifications.filter(
     (item) => !item.is_read
   ).length;
 
-  const loadNotifications = async () => {
-    setLoading(true);
+  const loadDashboard = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
     setError("");
 
     try {
@@ -471,27 +484,91 @@ function CaregiverDashboard({ onLogout }) {
       if (userError) throw userError;
       if (!user) throw new Error("Please log in again.");
 
-      const { data, error: notificationError } = await supabase
-        .from("notifications")
-        .select(
-          "id, title, message, is_read, created_at, patient_id"
-        )
-        .eq("recipient_id", user.id)
-        .order("created_at", { ascending: false });
+      setCurrentUserId(user.id);
+
+      const { data: notificationData, error: notificationError } =
+        await supabase
+          .from("notifications")
+          .select(
+            "id, title, message, is_read, created_at, patient_id"
+          )
+          .eq("recipient_id", user.id)
+          .order("created_at", { ascending: false });
 
       if (notificationError) throw notificationError;
 
-      setNotifications(data || []);
+      setNotifications(notificationData || []);
+
+      if (role === "Nurse") {
+        const { data: assignmentData, error: assignmentError } =
+          await supabase
+            .from("nurse_patient_links")
+            .select("id, patient_id, is_active, created_at")
+            .eq("nurse_id", user.id)
+            .eq("is_active", true)
+            .order("created_at", { ascending: false });
+
+        if (assignmentError) throw assignmentError;
+
+        setAssignments(assignmentData || []);
+      }
     } catch (err) {
-      setError(err.message || "Unable to load notifications.");
+      setError(err.message || "Unable to load dashboard.");
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   };
 
+  // Initial loading and live notification subscription
   useEffect(() => {
-    loadNotifications();
-  }, []);
+    let channel = null;
+    let cancelled = false;
+
+    loadDashboard();
+
+    const setupRealtime = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user || cancelled) return;
+
+      channel = supabase
+        .channel(`${role.toLowerCase()}-notifications-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `recipient_id=eq.${user.id}`,
+          },
+          () => {
+            loadDashboard(false);
+          }
+        )
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR") {
+            console.error("Notification Realtime connection failed.");
+          }
+        });
+
+      if (cancelled && channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      cancelled = true;
+
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [role]);
 
   const markAsRead = async (notificationId) => {
     setUpdatingId(notificationId);
@@ -501,7 +578,8 @@ function CaregiverDashboard({ onLogout }) {
       const { error: updateError } = await supabase
         .from("notifications")
         .update({ is_read: true })
-        .eq("id", notificationId);
+        .eq("id", notificationId)
+        .eq("recipient_id", currentUserId);
 
       if (updateError) throw updateError;
 
@@ -538,17 +616,97 @@ function CaregiverDashboard({ onLogout }) {
       <main className="dashboard-content">
         <section className="dashboard-welcome">
           <div>
-            <p className="dashboard-eyebrow">CAREGIVER DASHBOARD</p>
-            <h1>Welcome, Caregiver!</h1>
-            <p>Stay informed about the patients you support.</p>
+            <p className="dashboard-eyebrow">
+              {role.toUpperCase()} DASHBOARD
+            </p>
+            <h1>Welcome, {role}!</h1>
+            <p>
+              {role === "Nurse"
+                ? "Monitor your assigned patients and their medicine alerts."
+                : "Stay informed about the patients you support."}
+            </p>
           </div>
 
           <div className="dashboard-profile-icon">
-            <Users size={30} />
+            {role === "Nurse" ? (
+              <ClipboardList size={30} />
+            ) : (
+              <Users size={30} />
+            )}
           </div>
         </section>
 
-        <ConnectionPanel role="Caregiver" />
+        {role === "Caregiver" && (
+          <ConnectionPanel role="Caregiver" />
+        )}
+
+        {role === "Nurse" && (
+          <section className="dashboard-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>
+                  <UserRound size={21} />
+                  Assigned patients
+                </h2>
+                <p>Patients assigned to your approved nurse account.</p>
+              </div>
+
+              <span style={{ fontWeight: 700 }}>
+                {assignments.length}
+              </span>
+            </div>
+
+            {loading ? (
+              <p>Loading assignments...</p>
+            ) : assignments.length === 0 ? (
+              <p style={{ color: "#64746f" }}>
+                No active patients have been assigned to your account yet.
+                Contact the CareBridge administrator.
+              </p>
+            ) : (
+              <div className="medicine-list">
+                {assignments.map((assignment, index) => (
+                  <article
+                    className="medicine-item"
+                    key={assignment.id}
+                    style={{
+                      padding: 14,
+                      marginBottom: 10,
+                      border: "1px solid #e7ece9",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <div className="medicine-icon">
+                      <UserRound size={20} />
+                    </div>
+
+                    <div className="medicine-info" style={{ flex: 1 }}>
+                      <h3>Assigned Patient {index + 1}</h3>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        Patient ID: {assignment.patient_id}
+                      </p>
+
+                      <span
+                        style={{
+                          color: "#167044",
+                          fontSize: 12,
+                          fontWeight: 600,
+                        }}
+                      >
+                        ACTIVE ASSIGNMENT
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="dashboard-stats">
           <article className="stat-card">
@@ -583,7 +741,7 @@ function CaregiverDashboard({ onLogout }) {
             <button
               className="small-action"
               type="button"
-              onClick={loadNotifications}
+              onClick={() => loadDashboard()}
               disabled={loading}
             >
               <RefreshCw size={16} />
@@ -610,7 +768,7 @@ function CaregiverDashboard({ onLogout }) {
               <Bell size={35} />
               <h3>No notifications yet</h3>
               <p>
-                When an accepted patient misses a medicine dose,
+                When an assigned patient misses a medicine dose,
                 their alert will appear here.
               </p>
             </div>
@@ -637,6 +795,16 @@ function CaregiverDashboard({ onLogout }) {
                   <div className="medicine-info" style={{ flex: 1 }}>
                     <h3>{notification.title}</h3>
                     <p>{notification.message}</p>
+
+                    <p
+                      style={{
+                        fontSize: 12,
+                        overflowWrap: "anywhere",
+                        marginTop: 6,
+                      }}
+                    >
+                      Patient ID: {notification.patient_id}
+                    </p>
 
                     <span
                       style={{
@@ -694,6 +862,136 @@ function CaregiverDashboard({ onLogout }) {
   );
 }
 
+// --------------------------------------------------
+// NURSE APPROVAL CHECK
+// --------------------------------------------------
+
+function NurseAccess({ onLogout }) {
+  const [checking, setChecking] = useState(true);
+  const [approved, setApproved] = useState(false);
+  const [error, setError] = useState("");
+
+  const checkApproval = async () => {
+    setChecking(true);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("Please log in again.");
+
+      const { data, error: approvalError } = await supabase
+        .from("authorized_nurses")
+        .select("nurse_id")
+        .eq("nurse_id", user.id)
+        .maybeSingle();
+
+      if (approvalError) throw approvalError;
+
+      setApproved(Boolean(data));
+    } catch (err) {
+      setError(err.message || "Unable to verify nurse approval.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    checkApproval();
+  }, []);
+
+  if (checking) {
+    return (
+      <div className="app">
+        <main className="main-content">
+          <p>Verifying nurse approval...</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="app">
+        <main className="main-content">
+          <ShieldAlert size={40} />
+          <h2>Unable to verify account</h2>
+          <p>{error}</p>
+
+          <button className="continue-button" onClick={checkApproval}>
+            Retry
+          </button>
+
+          <button
+            className="logout-button"
+            style={{ marginTop: 12 }}
+            onClick={onLogout}
+          >
+            <LogOut size={17} />
+            Logout
+          </button>
+        </main>
+      </div>
+    );
+  }
+
+  if (!approved) {
+    return (
+      <div className="app">
+        <main
+          className="main-content"
+          style={{ textAlign: "center", maxWidth: 550 }}
+        >
+          <div className="login-icon">
+            <Clock size={30} />
+          </div>
+
+          <h2>Nurse account awaiting approval</h2>
+
+          <p>
+            Your nurse account has been created, but an administrator
+            has not approved it yet. You will be able to access the
+            Nurse Dashboard after approval.
+          </p>
+
+          <button
+            className="continue-button"
+            onClick={checkApproval}
+            style={{ marginTop: 20 }}
+          >
+            <RefreshCw size={17} />
+            Check approval status
+          </button>
+
+          <button
+            className="logout-button"
+            style={{ marginTop: 12 }}
+            onClick={onLogout}
+          >
+            <LogOut size={17} />
+            Logout
+          </button>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <NotificationDashboard
+      role="Nurse"
+      onLogout={onLogout}
+    />
+  );
+}
+
+// --------------------------------------------------
+// MAIN APP
+// --------------------------------------------------
+
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -735,7 +1033,7 @@ function App() {
   }, []);
 
   const handleRoleSelect = (role) => {
-    if (!["Patient", "Caregiver"].includes(role)) {
+    if (!ENABLED_ROLES.includes(role)) {
       setMessage(
         `${role} accounts are not enabled yet. This role will require administrator approval.`
       );
@@ -759,7 +1057,7 @@ function App() {
     event.preventDefault();
     setMessage("");
 
-    if (!["Patient", "Caregiver"].includes(selectedRole)) {
+    if (!ENABLED_ROLES.includes(selectedRole)) {
       setMessage("This account role is not enabled.");
       return;
     }
@@ -804,6 +1102,7 @@ function App() {
 
         if (actualRole !== selectedRole) {
           await supabase.auth.signOut();
+
           throw new Error(
             `This account is registered as ${actualRole || "another role"}. Select the correct role to log in.`
           );
@@ -857,7 +1156,16 @@ function App() {
     }
 
     if (role === "Caregiver") {
-      return <CaregiverDashboard onLogout={handleLogout} />;
+      return (
+        <NotificationDashboard
+          role="Caregiver"
+          onLogout={handleLogout}
+        />
+      );
+    }
+
+    if (role === "Nurse") {
+      return <NurseAccess onLogout={handleLogout} />;
     }
 
     return (
@@ -868,6 +1176,7 @@ function App() {
             This account does not have an enabled dashboard.
             Contact the administrator.
           </p>
+
           <button
             className="continue-button"
             onClick={handleLogout}
@@ -892,6 +1201,7 @@ function App() {
 
         <div className="language-select">
           <Globe size={17} />
+
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value)}
@@ -950,10 +1260,7 @@ function App() {
               <div className="role-grid">
                 {roles.map((role) => {
                   const Icon = role.icon;
-                  const enabled = [
-                    "Patient",
-                    "Caregiver",
-                  ].includes(role.name);
+                  const enabled = ENABLED_ROLES.includes(role.name);
 
                   return (
                     <button
@@ -968,7 +1275,12 @@ function App() {
                       <div className="role-details">
                         <h3>{role.name}</h3>
                         <p>{role.description}</p>
+
                         {!enabled && <small>Coming soon</small>}
+
+                        {role.name === "Nurse" && (
+                          <small>Administrator approval required</small>
+                        )}
                       </div>
 
                       <ArrowRight className="role-arrow" size={19} />
@@ -1000,6 +1312,13 @@ function App() {
                 : `Create your CareBridge ${selectedRole.toLowerCase()} account.`}
             </p>
 
+            {selectedRole === "Nurse" && (
+              <p className="demo-note">
+                Nurse accounts require administrator approval before
+                dashboard access.
+              </p>
+            )}
+
             <div className="auth-tabs">
               <button
                 type="button"
@@ -1028,6 +1347,7 @@ function App() {
               {authMode === "register" && (
                 <>
                   <label htmlFor="fullName">Full name</label>
+
                   <input
                     id="fullName"
                     type="text"
@@ -1044,6 +1364,7 @@ function App() {
               )}
 
               <label htmlFor="email">Email address</label>
+
               <input
                 id="email"
                 type="email"
@@ -1055,6 +1376,7 @@ function App() {
               />
 
               <label htmlFor="password">Password</label>
+
               <input
                 id="password"
                 type="password"
