@@ -21,11 +21,24 @@ import {
   Activity,
   UserCheck,
   TrendingUp,
-  ListChecks,
+  Search,
+  Phone,
+  CalendarDays,
+  Languages,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 const ROLES = ["Doctor", "Nurse", "Hospital", "Volunteer"];
+
+const DIRECTORY_ROLES = [
+  "All",
+  "Patient",
+  "Caregiver",
+  "Doctor",
+  "Nurse",
+  "Hospital",
+  "Volunteer",
+];
 
 const TABLES = {
   Doctor: { table: "doctor_patient_links" },
@@ -36,6 +49,7 @@ const TABLES = {
 export default function AdminAccess({ onLogout }) {
   const [loading, setLoading] = useState(true);
   const [admin, setAdmin] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -43,6 +57,14 @@ export default function AdminAccess({ onLogout }) {
   const [filter, setFilter] = useState("Pending");
 
   const [users, setUsers] = useState([]);
+
+  // User directory
+  const [directoryUsers, setDirectoryUsers] = useState([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directorySearch, setDirectorySearch] = useState("");
+  const [directoryRole, setDirectoryRole] = useState("All");
+  const [directoryActionId, setDirectoryActionId] = useState(null);
+
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
@@ -66,14 +88,30 @@ export default function AdminAccess({ onLogout }) {
 
     try {
       const { data, error } = await supabase.rpc("admin_get_analytics");
-
       if (error) throw error;
-
       setAnalytics(data);
     } catch (err) {
       setError(err.message || "Unable to load analytics.");
     } finally {
       setAnalyticsLoading(false);
+    }
+  };
+
+  // LOAD USER DIRECTORY
+  const loadUserDirectory = async () => {
+    setDirectoryLoading(true);
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "admin_get_user_directory"
+      );
+
+      if (error) throw error;
+      setDirectoryUsers(data || []);
+    } catch (err) {
+      setError(err.message || "Unable to load user directory.");
+    } finally {
+      setDirectoryLoading(false);
     }
   };
 
@@ -93,7 +131,6 @@ export default function AdminAccess({ onLogout }) {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-
       results[role] = data || [];
     }
 
@@ -121,6 +158,8 @@ export default function AdminAccess({ onLogout }) {
 
       if (userError) throw userError;
       if (!user) throw new Error("Please log in again.");
+
+      setCurrentUserId(user.id);
 
       const { data: adminData, error: adminError } = await supabase
         .from("authorized_admins")
@@ -155,6 +194,7 @@ export default function AdminAccess({ onLogout }) {
       await Promise.all([
         loadAssignments(),
         loadAnalytics(),
+        loadUserDirectory(),
       ]);
     } catch (err) {
       setError(err.message || "Unable to load Admin Dashboard.");
@@ -193,6 +233,71 @@ export default function AdminAccess({ onLogout }) {
       setError(err.message || "Unable to review account.");
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  // SUSPEND OR REACTIVATE USER
+  const manageUserAccount = async (user, action) => {
+    const isSuspending = action === "suspend";
+
+    if (user.user_id === currentUserId) {
+      setError("You cannot suspend or manage your own account.");
+      return;
+    }
+
+    if (user.is_admin) {
+      setError("Authorized Admin accounts cannot be managed here.");
+      return;
+    }
+
+    const confirmation = isSuspending
+      ? `Suspend ${user.full_name || "this user"}'s account? They will lose access to CareBridge until reactivated.`
+      : `Reactivate ${user.full_name || "this user"}'s account?`;
+
+    if (!window.confirm(confirmation)) return;
+
+    setDirectoryActionId(user.user_id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "admin-manage-user",
+        {
+          body: {
+            userId: user.user_id,
+            action,
+          },
+        }
+      );
+
+      if (error) {
+        let message = error.message || "Account operation failed.";
+
+        try {
+          const response = await error.context?.json();
+          if (response?.error) message = response.error;
+        } catch {
+          // Keep the original error message.
+        }
+
+        throw new Error(message);
+      }
+
+      if (data?.error) throw new Error(data.error);
+
+      setSuccess(
+        data?.message ||
+          (isSuspending
+            ? "User suspended successfully."
+            : "User reactivated successfully.")
+      );
+
+      await loadUserDirectory();
+    } catch (err) {
+      setError(err.message || "Unable to update user account.");
+    } finally {
+      setDirectoryActionId(null);
     }
   };
 
@@ -317,6 +422,27 @@ export default function AdminAccess({ onLogout }) {
     return user?.full_name || id;
   };
 
+  // FILTER USER DIRECTORY
+  const filteredDirectoryUsers = directoryUsers.filter((user) => {
+    const matchesRole =
+      directoryRole === "All" || user.role === directoryRole;
+
+    const search = directorySearch.trim().toLowerCase();
+
+    const matchesSearch =
+      !search ||
+      (user.full_name || "").toLowerCase().includes(search) ||
+      (user.phone || "").toLowerCase().includes(search) ||
+      (user.user_id || "").toLowerCase().includes(search);
+
+    return matchesRole && matchesSearch;
+  });
+
+  // ACCOUNT STATUS
+  const isUserSuspended = (user) =>
+    user.banned_until &&
+    new Date(user.banned_until).getTime() > Date.now();
+
   // REFRESH
   const refreshAssignments = async () => {
     setError("");
@@ -332,8 +458,16 @@ export default function AdminAccess({ onLogout }) {
 
   const refreshAnalytics = async () => {
     setError("");
+    setSuccess("");
     await loadAnalytics();
-    if (analytics) setSuccess("Analytics refreshed successfully.");
+    setSuccess("Analytics refreshed successfully.");
+  };
+
+  const refreshDirectory = async () => {
+    setError("");
+    setSuccess("");
+    await loadUserDirectory();
+    setSuccess("User directory refreshed successfully.");
   };
 
   // ANALYTICS CARD
@@ -441,36 +575,11 @@ export default function AdminAccess({ onLogout }) {
                   </h3>
 
                   <section className="dashboard-stats">
-                    <MetricCard
-                      icon={UserRound}
-                      label="Patients"
-                      value={analytics.patients}
-                      description="Registered patient accounts"
-                    />
-                    <MetricCard
-                      icon={Stethoscope}
-                      label="Doctors"
-                      value={analytics.doctors}
-                      description="Approved doctors"
-                    />
-                    <MetricCard
-                      icon={HeartPulse}
-                      label="Nurses"
-                      value={analytics.nurses}
-                      description="Approved nurses"
-                    />
-                    <MetricCard
-                      icon={Hospital}
-                      label="Hospitals"
-                      value={analytics.hospitals}
-                      description="Approved hospitals"
-                    />
-                    <MetricCard
-                      icon={HandHeart}
-                      label="Volunteers"
-                      value={analytics.volunteers}
-                      description="Approved volunteers"
-                    />
+                    <MetricCard icon={UserRound} label="Patients" value={analytics.patients} description="Registered patient accounts" />
+                    <MetricCard icon={Stethoscope} label="Doctors" value={analytics.doctors} description="Approved doctors" />
+                    <MetricCard icon={HeartPulse} label="Nurses" value={analytics.nurses} description="Approved nurses" />
+                    <MetricCard icon={Hospital} label="Hospitals" value={analytics.hospitals} description="Approved hospitals" />
+                    <MetricCard icon={HandHeart} label="Volunteers" value={analytics.volunteers} description="Approved volunteers" />
                   </section>
 
                   <h3 style={{ marginTop: 24 }}>
@@ -478,24 +587,9 @@ export default function AdminAccess({ onLogout }) {
                   </h3>
 
                   <section className="dashboard-stats">
-                    <MetricCard
-                      icon={Clock}
-                      label="Pending"
-                      value={analytics.pending_requests}
-                      description="Awaiting review"
-                    />
-                    <MetricCard
-                      icon={CheckCircle2}
-                      label="Approved"
-                      value={analytics.approved_requests}
-                      description="Approved requests"
-                    />
-                    <MetricCard
-                      icon={XCircle}
-                      label="Rejected"
-                      value={analytics.rejected_requests}
-                      description="Rejected requests"
-                    />
+                    <MetricCard icon={Clock} label="Pending" value={analytics.pending_requests} description="Awaiting review" />
+                    <MetricCard icon={CheckCircle2} label="Approved" value={analytics.approved_requests} description="Approved requests" />
+                    <MetricCard icon={XCircle} label="Rejected" value={analytics.rejected_requests} description="Rejected requests" />
                   </section>
 
                   <h3 style={{ marginTop: 24 }}>
@@ -503,42 +597,12 @@ export default function AdminAccess({ onLogout }) {
                   </h3>
 
                   <section className="dashboard-stats">
-                    <MetricCard
-                      icon={Stethoscope}
-                      label="Doctor Active"
-                      value={analytics.doctor_active}
-                      description="Active doctor links"
-                    />
-                    <MetricCard
-                      icon={Activity}
-                      label="Doctor Inactive"
-                      value={analytics.doctor_inactive}
-                      description="Inactive doctor links"
-                    />
-                    <MetricCard
-                      icon={HeartPulse}
-                      label="Nurse Active"
-                      value={analytics.nurse_active}
-                      description="Active nurse links"
-                    />
-                    <MetricCard
-                      icon={Activity}
-                      label="Nurse Inactive"
-                      value={analytics.nurse_inactive}
-                      description="Inactive nurse links"
-                    />
-                    <MetricCard
-                      icon={Hospital}
-                      label="Hospital Active"
-                      value={analytics.hospital_active}
-                      description="Active hospital links"
-                    />
-                    <MetricCard
-                      icon={Activity}
-                      label="Hospital Inactive"
-                      value={analytics.hospital_inactive}
-                      description="Inactive hospital links"
-                    />
+                    <MetricCard icon={Stethoscope} label="Doctor Active" value={analytics.doctor_active} description="Active doctor links" />
+                    <MetricCard icon={Activity} label="Doctor Inactive" value={analytics.doctor_inactive} description="Inactive doctor links" />
+                    <MetricCard icon={HeartPulse} label="Nurse Active" value={analytics.nurse_active} description="Active nurse links" />
+                    <MetricCard icon={Activity} label="Nurse Inactive" value={analytics.nurse_inactive} description="Inactive nurse links" />
+                    <MetricCard icon={Hospital} label="Hospital Active" value={analytics.hospital_active} description="Active hospital links" />
+                    <MetricCard icon={Activity} label="Hospital Inactive" value={analytics.hospital_inactive} description="Inactive hospital links" />
                   </section>
 
                   <h3 style={{ marginTop: 24 }}>
@@ -546,55 +610,321 @@ export default function AdminAccess({ onLogout }) {
                   </h3>
 
                   <section className="dashboard-stats">
-                    <MetricCard
-                      icon={Clock}
-                      label="Pending Tasks"
-                      value={analytics.volunteer_pending}
-                      description="Tasks waiting to start"
-                    />
-                    <MetricCard
-                      icon={TrendingUp}
-                      label="In Progress"
-                      value={analytics.volunteer_in_progress}
-                      description="Ongoing tasks"
-                    />
-                    <MetricCard
-                      icon={CheckCircle2}
-                      label="Completed"
-                      value={analytics.volunteer_completed}
-                      description="Completed tasks"
-                    />
-                    <MetricCard
-                      icon={XCircle}
-                      label="Cancelled"
-                      value={analytics.volunteer_cancelled}
-                      description="Cancelled tasks"
-                    />
+                    <MetricCard icon={Clock} label="Pending Tasks" value={analytics.volunteer_pending} description="Tasks waiting to start" />
+                    <MetricCard icon={TrendingUp} label="In Progress" value={analytics.volunteer_in_progress} description="Ongoing tasks" />
+                    <MetricCard icon={CheckCircle2} label="Completed" value={analytics.volunteer_completed} description="Completed tasks" />
+                    <MetricCard icon={XCircle} label="Cancelled" value={analytics.volunteer_cancelled} description="Cancelled tasks" />
                   </section>
                 </>
               )}
             </section>
 
+            {/* USER MANAGEMENT */}
+            <section className="dashboard-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>
+                    <Users size={21} /> User Management
+                  </h2>
+                  <p>
+                    View, search, suspend and reactivate registered accounts.
+                  </p>
+                </div>
+
+                <button
+                  className="small-action"
+                  type="button"
+                  onClick={refreshDirectory}
+                  disabled={directoryLoading || directoryActionId !== null}
+                >
+                  <RefreshCw size={16} />
+                  {directoryLoading ? "Loading..." : "Refresh Users"}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 12,
+                  marginTop: 20,
+                  marginBottom: 18,
+                }}
+              >
+                <div>
+                  <label htmlFor="directory-search">Search users</label>
+                  <div style={{ position: "relative" }}>
+                    <Search
+                      size={18}
+                      style={{
+                        position: "absolute",
+                        left: 12,
+                        top: 13,
+                        color: "#64746f",
+                      }}
+                    />
+                    <input
+                      id="directory-search"
+                      type="text"
+                      value={directorySearch}
+                      onChange={(e) => setDirectorySearch(e.target.value)}
+                      placeholder="Search name, phone or user ID"
+                      style={{
+                        ...fieldStyle,
+                        paddingLeft: 38,
+                        marginBottom: 0,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="directory-role">Filter by role</label>
+                  <select
+                    id="directory-role"
+                    value={directoryRole}
+                    onChange={(e) => setDirectoryRole(e.target.value)}
+                    style={{ ...fieldStyle, marginBottom: 0 }}
+                  >
+                    {DIRECTORY_ROLES.map((role) => (
+                      <option key={role} value={role}>
+                        {role === "All" ? "All roles" : role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 16,
+                  color: "#64746f",
+                  fontSize: 14,
+                }}
+              >
+                <span>
+                  Showing <strong>{filteredDirectoryUsers.length}</strong> of{" "}
+                  <strong>{directoryUsers.length}</strong> users
+                </span>
+                <span>
+                  Total registered accounts: {directoryUsers.length}
+                </span>
+              </div>
+
+              {directoryLoading && directoryUsers.length === 0 ? (
+                <p>Loading registered users...</p>
+              ) : filteredDirectoryUsers.length === 0 ? (
+                <div
+                  style={{
+                    padding: 20,
+                    textAlign: "center",
+                    background: "#f7faf8",
+                    borderRadius: 10,
+                  }}
+                >
+                  <Users size={28} color="#64746f" />
+                  <p style={{ marginBottom: 0 }}>
+                    No users match your search or selected role.
+                  </p>
+                </div>
+              ) : (
+                <div className="medicine-list">
+                  {filteredDirectoryUsers.map((user) => {
+                    const suspended = isUserSuspended(user);
+                    const isSelf = user.user_id === currentUserId;
+                    const protectedAccount = user.is_admin || isSelf;
+                    const processing =
+                      directoryActionId === user.user_id;
+
+                    return (
+                      <article
+                        className="medicine-item"
+                        key={user.user_id}
+                        style={{
+                          padding: 15,
+                          marginBottom: 12,
+                          border: "1px solid #e7ece9",
+                          borderRadius: 10,
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <div className="medicine-icon">
+                          <UserRound size={21} />
+                        </div>
+
+                        <div
+                          className="medicine-info"
+                          style={{ flex: 1, minWidth: 0 }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              flexWrap: "wrap",
+                              gap: 8,
+                            }}
+                          >
+                            <h3 style={{ margin: 0 }}>
+                              {user.full_name || "Unnamed User"}
+                            </h3>
+
+                            <span
+                              style={{
+                                padding: "5px 10px",
+                                borderRadius: 20,
+                                background: "#e8f3ed",
+                                color: "#176b45",
+                                fontSize: 12,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {user.role}
+                            </span>
+                          </div>
+
+                          <p style={{ marginTop: 12 }}>
+                            <Phone size={15} />{" "}
+                            {user.phone || "Phone not provided"}
+                          </p>
+
+                          <p>
+                            <Languages size={15} />{" "}
+                            {user.preferred_language || "Language not specified"}
+                          </p>
+
+                          <p>
+                            <CalendarDays size={15} /> Registered:{" "}
+                            {user.registered_at
+                              ? new Date(user.registered_at).toLocaleString()
+                              : "Not available"}
+                          </p>
+
+                          <p
+                            style={{
+                              fontSize: 12,
+                              color: "#64746f",
+                              overflowWrap: "anywhere",
+                            }}
+                          >
+                            User ID: {user.user_id}
+                          </p>
+
+                          <div style={{ marginTop: 12 }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "6px 11px",
+                                borderRadius: 20,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                background: suspended ? "#fee4e2" : "#e8f3ed",
+                                color: suspended ? "#b42318" : "#176b45",
+                              }}
+                            >
+                              {suspended ? "SUSPENDED" : "ACTIVE"}
+                            </span>
+
+                            {user.is_admin && (
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  marginLeft: 7,
+                                  padding: "6px 11px",
+                                  borderRadius: 20,
+                                  background: "#e9e8ff",
+                                  color: "#4338a8",
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ADMIN
+                              </span>
+                            )}
+
+                            {isSelf && (
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  marginLeft: 7,
+                                  padding: "6px 11px",
+                                  borderRadius: 20,
+                                  background: "#f1f5f9",
+                                  color: "#475569",
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                YOUR ACCOUNT
+                              </span>
+                            )}
+                          </div>
+
+                          {!protectedAccount && (
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                flexWrap: "wrap",
+                                marginTop: 14,
+                              }}
+                            >
+                              {suspended ? (
+                                <button
+                                  type="button"
+                                  className="continue-button"
+                                  disabled={processing || directoryActionId !== null}
+                                  onClick={() =>
+                                    manageUserAccount(user, "reactivate")
+                                  }
+                                >
+                                  <RotateCcw size={16} />
+                                  {processing ? "Processing..." : "Reactivate Account"}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="small-action"
+                                  disabled={processing || directoryActionId !== null}
+                                  onClick={() =>
+                                    manageUserAccount(user, "suspend")
+                                  }
+                                >
+                                  <Ban size={16} />
+                                  {processing ? "Processing..." : "Suspend Account"}
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {protectedAccount && (
+                            <p
+                              style={{
+                                fontSize: 13,
+                                color: "#64746f",
+                                marginTop: 12,
+                              }}
+                            >
+                              This account is protected from account management.
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
             {/* ACCOUNT REQUEST SUMMARY */}
             <section className="dashboard-stats">
-              <MetricCard
-                icon={Clock}
-                label="Pending Requests"
-                value={pendingCount}
-                description="Awaiting review"
-              />
-              <MetricCard
-                icon={CheckCircle2}
-                label="Approved"
-                value={approvedCount}
-                description="Authorized accounts"
-              />
-              <MetricCard
-                icon={XCircle}
-                label="Rejected"
-                value={rejectedCount}
-                description="Declined requests"
-              />
+              <MetricCard icon={Clock} label="Pending Requests" value={pendingCount} description="Awaiting review" />
+              <MetricCard icon={CheckCircle2} label="Approved" value={approvedCount} description="Authorized accounts" />
+              <MetricCard icon={XCircle} label="Rejected" value={rejectedCount} description="Declined requests" />
             </section>
 
             {/* ACCOUNT APPROVALS */}
@@ -661,15 +991,8 @@ export default function AdminAccess({ onLogout }) {
 
                       <div className="medicine-info" style={{ flex: 1 }}>
                         <h3>{request.full_name || request.role}</h3>
-                        <p>
-                          Role: <strong>{request.role}</strong>
-                        </p>
-                        <p
-                          style={{
-                            fontSize: 12,
-                            overflowWrap: "anywhere",
-                          }}
-                        >
+                        <p>Role: <strong>{request.role}</strong></p>
+                        <p style={{ fontSize: 12, overflowWrap: "anywhere" }}>
                           User ID: {request.user_id}
                         </p>
                         <strong>{request.status.toUpperCase()}</strong>
@@ -742,9 +1065,7 @@ export default function AdminAccess({ onLogout }) {
                   style={fieldStyle}
                 >
                   {ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
+                    <option key={role} value={role}>{role}</option>
                   ))}
                 </select>
 
@@ -756,7 +1077,6 @@ export default function AdminAccess({ onLogout }) {
                   required
                 >
                   <option value="">Select {selectedRole}</option>
-
                   {professionals.map((u) => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.full_name} ({u.user_id.slice(0, 8)})
@@ -772,7 +1092,6 @@ export default function AdminAccess({ onLogout }) {
                   required
                 >
                   <option value="">Select Patient</option>
-
                   {patients.map((u) => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.full_name} ({u.user_id.slice(0, 8)})
@@ -845,13 +1164,7 @@ export default function AdminAccess({ onLogout }) {
 
               {ROLES.map((role) => (
                 <div key={role} style={{ marginTop: 20 }}>
-                  <h3
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
+                  <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {role === "Doctor" && <Stethoscope size={18} />}
                     {role === "Nurse" && <HeartPulse size={18} />}
                     {role === "Hospital" && <Hospital size={18} />}
@@ -875,8 +1188,7 @@ export default function AdminAccess({ onLogout }) {
                       const isVolunteer = role === "Volunteer";
                       const isActive = item.is_active;
                       const isCancelled = item.status === "Cancelled";
-                      const isProcessing =
-                        assignmentProcessingId === item.id;
+                      const isProcessing = assignmentProcessingId === item.id;
 
                       return (
                         <article
@@ -890,10 +1202,7 @@ export default function AdminAccess({ onLogout }) {
                             alignItems: "flex-start",
                           }}
                         >
-                          <div
-                            className="medicine-info"
-                            style={{ flex: 1 }}
-                          >
+                          <div className="medicine-info" style={{ flex: 1 }}>
                             <strong>{findName(professionalId)}</strong>
                             <p>Patient: {findName(item.patient_id)}</p>
 
@@ -912,12 +1221,7 @@ export default function AdminAccess({ onLogout }) {
                               </strong>
                             </p>
 
-                            <p
-                              style={{
-                                fontSize: 12,
-                                color: "#64746f",
-                              }}
-                            >
+                            <p style={{ fontSize: 12, color: "#64746f" }}>
                               Created:{" "}
                               {item.created_at
                                 ? new Date(item.created_at).toLocaleString()
@@ -935,11 +1239,7 @@ export default function AdminAccess({ onLogout }) {
                               {!isVolunteer && (
                                 <button
                                   type="button"
-                                  className={
-                                    isActive
-                                      ? "small-action"
-                                      : "continue-button"
-                                  }
+                                  className={isActive ? "small-action" : "continue-button"}
                                   disabled={isProcessing}
                                   onClick={() =>
                                     updateAssignment(
@@ -949,11 +1249,7 @@ export default function AdminAccess({ onLogout }) {
                                     )
                                   }
                                 >
-                                  {isActive ? (
-                                    <Ban size={16} />
-                                  ) : (
-                                    <RotateCcw size={16} />
-                                  )}
+                                  {isActive ? <Ban size={16} /> : <RotateCcw size={16} />}
                                   {isActive ? "Deactivate" : "Reactivate"}
                                 </button>
                               )}
@@ -964,22 +1260,15 @@ export default function AdminAccess({ onLogout }) {
                                   className="small-action"
                                   disabled={isProcessing}
                                   onClick={() =>
-                                    updateAssignment(
-                                      "Volunteer",
-                                      item.id,
-                                      "Cancel"
-                                    )
+                                    updateAssignment("Volunteer", item.id, "Cancel")
                                   }
                                 >
-                                  <XCircle size={16} />
-                                  Cancel Task
+                                  <XCircle size={16} /> Cancel Task
                                 </button>
                               )}
 
                               {isProcessing && (
-                                <span style={{ fontSize: 13 }}>
-                                  Updating...
-                                </span>
+                                <span style={{ fontSize: 13 }}>Updating...</span>
                               )}
 
                               {isVolunteer && isCancelled && (
