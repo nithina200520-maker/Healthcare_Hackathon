@@ -14,8 +14,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useLanguage, LanguageSelector } from "../context/LanguageContext";
 
 export default function VolunteerAccess({ onLogout }) {
+  const { t } = useLanguage();
   const [checking, setChecking] = useState(true);
   const [volunteer, setVolunteer] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -33,7 +35,7 @@ export default function VolunteerAccess({ onLogout }) {
       } = await supabase.auth.getUser();
 
       if (userError) throw userError;
-      if (!user) throw new Error("Please log in again.");
+      if (!user) throw new Error(t("Please log in again."));
 
       const { data: volunteerData, error: volunteerError } =
         await supabase
@@ -62,7 +64,7 @@ export default function VolunteerAccess({ onLogout }) {
 
       setTasks(taskData || []);
     } catch (err) {
-      setError(err.message || "Unable to load volunteer dashboard.");
+      setError(err.message || t("Unable to load volunteer dashboard."));
     } finally {
       setChecking(false);
     }
@@ -89,7 +91,7 @@ export default function VolunteerAccess({ onLogout }) {
 
       await loadDashboard();
     } catch (err) {
-      setError(err.message || "Unable to update task.");
+      setError(err.message || t("Unable to update task."));
     } finally {
       setUpdatingTask(null);
     }
@@ -117,22 +119,24 @@ export default function VolunteerAccess({ onLogout }) {
           <span>CareBridge</span>
         </div>
 
-        <button className="logout-button" onClick={onLogout}>
-          <LogOut size={17} />
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LanguageSelector />
+          <button className="logout-button" onClick={onLogout}>
+            <LogOut size={17} />
+            {t("Logout")}
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-content">
         <section className="dashboard-welcome">
           <div>
-            <p className="dashboard-eyebrow">VOLUNTEER DASHBOARD</p>
+            <p className="dashboard-eyebrow">{t("VOLUNTEER DASHBOARD")}</p>
             <h1>
-              Welcome, {volunteer?.volunteer_name || "Volunteer"}!
+              {t("Welcome, Volunteer!")}
             </h1>
             <p>
-              Support patients and help make healthcare more accessible
-              through CareBridge.
+              {t("Support patients and help make healthcare more accessible through CareBridge.")}
             </p>
           </div>
 
@@ -153,14 +157,14 @@ export default function VolunteerAccess({ onLogout }) {
               onClick={loadDashboard}
             >
               <RefreshCw size={16} />
-              Retry
+              {t("Retry")}
             </button>
           </section>
         )}
 
         {checking ? (
           <section className="dashboard-panel">
-            <p>Checking volunteer approval and loading tasks...</p>
+            <p>{t("Loading...")}</p>
           </section>
         ) : !error && !volunteer ? (
           <section
@@ -171,11 +175,10 @@ export default function VolunteerAccess({ onLogout }) {
               <Clock size={30} />
             </div>
 
-            <h2>Volunteer account awaiting approval</h2>
+            <h2>{t("Volunteer account awaiting approval")}</h2>
 
             <p>
-              Your account has been created, but an administrator
-              must approve it before you can access volunteer tasks.
+              {t("Your volunteer account has been created, but an administrator has not approved it yet. Your dashboard will become available after approval.")}
             </p>
 
             <button
@@ -185,7 +188,7 @@ export default function VolunteerAccess({ onLogout }) {
               style={{ marginTop: 15 }}
             >
               <RefreshCw size={17} />
-              Check approval status
+              {t("Check approval status")}
             </button>
           </section>
         ) : !error && volunteer ? (
@@ -195,27 +198,27 @@ export default function VolunteerAccess({ onLogout }) {
                 <div className="stat-icon">
                   <Circle />
                 </div>
-                <p>Pending tasks</p>
+                <p>{t("Pending")}</p>
                 <h2>{pendingCount}</h2>
-                <span>Waiting to start</span>
+                <span>{t("Waiting to start") || "Waiting to start"}</span>
               </article>
 
               <article className="stat-card">
                 <div className="stat-icon">
                   <LoaderCircle />
                 </div>
-                <p>In progress</p>
+                <p>{t("In Progress")}</p>
                 <h2>{progressCount}</h2>
-                <span>Currently working</span>
+                <span>{t("Currently working") || "Currently working"}</span>
               </article>
 
               <article className="stat-card">
                 <div className="stat-icon">
                   <CheckCircle2 />
                 </div>
-                <p>Completed</p>
+                <p>{t("Completed")}</p>
                 <h2>{completedCount}</h2>
-                <span>Tasks finished</span>
+                <span>{t("Tasks finished") || "Tasks finished"}</span>
               </article>
             </section>
 
@@ -224,11 +227,10 @@ export default function VolunteerAccess({ onLogout }) {
                 <div>
                   <h2>
                     <HandHeart size={21} />
-                    My assigned tasks
+                    {t("Assigned Tasks")}
                   </h2>
                   <p>
-                    View your patient-support assignments and update
-                    their progress.
+                    {t("Support patients with community tasks and care coordination.")}
                   </p>
                 </div>
 
@@ -239,14 +241,13 @@ export default function VolunteerAccess({ onLogout }) {
                   disabled={checking}
                 >
                   <RefreshCw size={16} />
-                  Refresh
+                  {t("Refresh")}
                 </button>
               </div>
 
               {tasks.length === 0 ? (
                 <p style={{ color: "#64746f" }}>
-                  No tasks have been assigned to you yet.
-                  Please check again later.
+                  {t("No tasks have been assigned to you yet.") || "No tasks have been assigned to you yet."}
                 </p>
               ) : (
                 <div className="medicine-list">
@@ -302,7 +303,7 @@ export default function VolunteerAccess({ onLogout }) {
                                 : "#64746f",
                           }}
                         >
-                          {task.status.toUpperCase()}
+                          {t(task.status) || task.status.toUpperCase()}
                         </span>
 
                         {task.status === "Cancelled" && (
@@ -330,8 +331,8 @@ export default function VolunteerAccess({ onLogout }) {
                               }
                             >
                               {updatingTask === task.id
-                                ? "Updating..."
-                                : "Start task"}
+                                ? t("Updating...") || "Updating..."
+                                : t("Start Task")}
                             </button>
                           )}
 
@@ -345,8 +346,8 @@ export default function VolunteerAccess({ onLogout }) {
                               }
                             >
                               {updatingTask === task.id
-                                ? "Updating..."
-                                : "Mark completed"}
+                                ? t("Updating...") || "Updating..."
+                                : t("Mark Completed")}
                             </button>
                           )}
                         </div>
@@ -358,8 +359,7 @@ export default function VolunteerAccess({ onLogout }) {
             </section>
 
             <p className="dashboard-disclaimer">
-              Volunteers should follow hospital instructions and must
-              not perform medical procedures or provide medical diagnoses.
+              {t("Volunteers should follow hospital instructions and must not perform medical procedures or provide medical diagnoses.") || "Volunteers should follow hospital instructions."}
             </p>
           </>
         ) : null}

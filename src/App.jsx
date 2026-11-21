@@ -4,6 +4,7 @@ import HospitalAccess from "./components/HospitalAccess";
 import { useEffect, useState } from "react";
 import PatientDashboard from "./components/PatientDashboard";
 import { supabase } from "./lib/supabase";
+import { useLanguage, LanguageSelector } from "./context/LanguageContext";
 
 import {
   HeartPulse,
@@ -87,6 +88,7 @@ const ENABLED_ROLES = [
 // --------------------------------------------------
 
 function ConnectionPanel({ role }) {
+  const { t } = useLanguage();
   const [userId, setUserId] = useState("");
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -141,12 +143,12 @@ function ConnectionPanel({ role }) {
     const targetId = userId.trim();
 
     if (!targetId) {
-      setError("Enter the caregiver's account ID.");
+      setError(t("Enter the caregiver's account ID."));
       return;
     }
 
     if (targetId === currentUserId) {
-      setError("You cannot connect your account to itself.");
+      setError(t("You cannot connect your account to itself."));
       return;
     }
 
@@ -164,24 +166,24 @@ function ConnectionPanel({ role }) {
       if (insertError) {
         if (insertError.code === "23505") {
           throw new Error(
-            "A connection request already exists for this account."
+            t("A connection request already exists for this account.")
           );
         }
 
         if (insertError.code === "23503") {
           throw new Error(
-            "This account ID was not found. Ask the caregiver to check their ID."
+            t("This account ID was not found. Ask the caregiver to check their ID.")
           );
         }
 
         throw insertError;
       }
 
-      setMessage("Connection request sent successfully.");
+      setMessage(t("Connection request sent successfully."));
       setUserId("");
       await loadConnections();
     } catch (err) {
-      setError(err.message || "Could not send the request.");
+      setError(err.message || t("Could not send the request."));
     } finally {
       setSaving(false);
     }
@@ -203,13 +205,13 @@ function ConnectionPanel({ role }) {
 
       setMessage(
         status === "accepted"
-          ? "Connection request accepted."
-          : "Connection request rejected."
+          ? t("Connection request accepted.")
+          : t("Connection request rejected.")
       );
 
       await loadConnections();
     } catch (err) {
-      setError(err.message || "Unable to update the request.");
+      setError(err.message || t("Unable to update the request."));
     } finally {
       setSaving(false);
     }
@@ -218,9 +220,9 @@ function ConnectionPanel({ role }) {
   const copyUserId = async () => {
     try {
       await navigator.clipboard.writeText(currentUserId);
-      setMessage("Your account ID has been copied.");
+      setMessage(t("Your account ID has been copied."));
     } catch {
-      setError("Could not copy automatically. Select and copy your ID.");
+      setError(t("Could not copy automatically. Select and copy your ID."));
     }
   };
 
@@ -231,13 +233,13 @@ function ConnectionPanel({ role }) {
           <h2>
             <Link2 size={21} />
             {role === "Patient"
-              ? "Caregiver connections"
-              : "Patient connections"}
+              ? t("Caregiver connections")
+              : t("Patient connections")}
           </h2>
           <p>
             {role === "Patient"
-              ? "Connect with someone who can support your care."
-              : "Review patient connection requests."}
+              ? t("Connect with someone who can support your care.")
+              : t("Review patient connection requests.")}
           </p>
         </div>
 
@@ -248,7 +250,7 @@ function ConnectionPanel({ role }) {
           disabled={loading}
         >
           <RefreshCw size={16} />
-          Refresh
+          {t("Refresh")}
         </button>
       </div>
 
@@ -261,7 +263,7 @@ function ConnectionPanel({ role }) {
         }}
       >
         <p style={{ margin: "0 0 8px", fontWeight: 600 }}>
-          Your CareBridge account ID
+          {t("Your CareBridge account ID")}
         </p>
 
         <div
@@ -273,7 +275,7 @@ function ConnectionPanel({ role }) {
           }}
         >
           <code style={{ overflowWrap: "anywhere", fontSize: 13, flex: 1 }}>
-            {currentUserId || "Loading account ID..."}
+            {currentUserId || t("Loading account ID...")}
           </code>
 
           <button
@@ -283,12 +285,12 @@ function ConnectionPanel({ role }) {
             disabled={!currentUserId}
           >
             <Copy size={15} />
-            Copy ID
+            {t("Copy ID")}
           </button>
         </div>
 
         <p style={{ fontSize: 12, color: "#64746f", marginBottom: 0 }}>
-          Share this ID only with the person you want to connect with.
+          {t("Share this ID only with the person you want to connect with.")}
         </p>
       </div>
 
@@ -298,7 +300,7 @@ function ConnectionPanel({ role }) {
             htmlFor="caregiver-id"
             style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
           >
-            Enter caregiver account ID
+            {t("Enter caregiver account ID")}
           </label>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -307,7 +309,7 @@ function ConnectionPanel({ role }) {
               type="text"
               value={userId}
               onChange={(event) => setUserId(event.target.value)}
-              placeholder="Paste caregiver UUID"
+              placeholder={t("Paste caregiver UUID")}
               required
               style={{ flex: 1, minWidth: 200 }}
             />
@@ -318,7 +320,7 @@ function ConnectionPanel({ role }) {
               disabled={saving || !currentUserId}
             >
               <UserPlus size={17} />
-              {saving ? "Sending..." : "Send request"}
+              {saving ? t("Sending...") : t("Send request")}
             </button>
           </div>
         </form>
@@ -337,16 +339,16 @@ function ConnectionPanel({ role }) {
       )}
 
       <h3 style={{ marginBottom: 12 }}>
-        {role === "Patient" ? "Your caregivers" : "Patient requests"}
+        {role === "Patient" ? t("Your caregivers") : t("Patient requests")}
       </h3>
 
       {loading ? (
-        <p>Loading connections...</p>
+        <p>{t("Loading connections...")}</p>
       ) : connections.length === 0 ? (
         <p style={{ color: "#64746f", padding: "12px 0" }}>
           {role === "Patient"
-            ? "No caregiver connections yet. Send a request using their account ID."
-            : "No patient connection requests yet."}
+            ? t("No caregiver connections yet. Send a request using their account ID.")
+            : t("No patient connection requests yet.")}
         </p>
       ) : (
         <div className="medicine-list">
@@ -372,7 +374,7 @@ function ConnectionPanel({ role }) {
                 </div>
 
                 <div className="medicine-info" style={{ flex: 1 }}>
-                  <h3>{role === "Patient" ? "Caregiver" : "Patient"}</h3>
+                  <h3>{role === "Patient" ? t("Caregiver") : t("Patient")}</h3>
                   <p style={{ fontSize: 12, overflowWrap: "anywhere" }}>
                     Account ID: {otherUserId}
                   </p>
@@ -389,7 +391,7 @@ function ConnectionPanel({ role }) {
                             : "#b7791f",
                     }}
                   >
-                    {connection.status.toUpperCase()}
+                    {t(connection.status.toUpperCase()) || connection.status.toUpperCase()}
                   </span>
                 </div>
 
@@ -405,7 +407,7 @@ function ConnectionPanel({ role }) {
                         }
                       >
                         <CheckCircle2 size={15} />
-                        Accept
+                        {t("Accept")}
                       </button>
 
                       <button
@@ -417,7 +419,7 @@ function ConnectionPanel({ role }) {
                         }
                       >
                         <XCircle size={15} />
-                        Reject
+                        {t("Reject")}
                       </button>
                     </div>
                   )}
@@ -434,9 +436,8 @@ function ConnectionPanel({ role }) {
 // PATIENT DOCTOR COMMUNICATION
 // --------------------------------------------------
 
-function 
-
-PatientConcernPanel() {
+function PatientConcernPanel() {
+  const { t } = useLanguage();
   const [assignments, setAssignments] = useState([]);
   const [concerns, setConcerns] = useState([]);
   const [selectedDoctor, setSelectedDoctor] = useState("");
@@ -533,12 +534,12 @@ PatientConcernPanel() {
     setNotice("");
 
     if (!selectedDoctor) {
-      setError("Select an assigned doctor.");
+      setError(t("Select an assigned doctor."));
       return;
     }
 
     if (!subject.trim() || !message.trim()) {
-      setError("Enter both a subject and your concern.");
+      setError(t("Enter both a subject and your concern."));
       return;
     }
 
@@ -559,10 +560,10 @@ PatientConcernPanel() {
 
       setSubject("");
       setMessage("");
-      setNotice("Your concern has been sent to your assigned doctor.");
+      setNotice(t("Your concern has been sent to your assigned doctor."));
       await loadData(false);
     } catch (err) {
-      setError(err.message || "Unable to submit your concern.");
+      setError(err.message || t("Unable to submit your concern."));
     } finally {
       setSaving(false);
     }
@@ -574,9 +575,9 @@ PatientConcernPanel() {
         <div>
           <h2>
             <MessageSquare size={21} />
-            Doctor communication
+            {t("Doctor communication")}
           </h2>
-          <p>Send a non-emergency health concern to your assigned doctor.</p>
+          <p>{t("Send a non-emergency health concern to your assigned doctor.")}</p>
         </div>
 
         <button
@@ -586,7 +587,7 @@ PatientConcernPanel() {
           disabled={loading}
         >
           <RefreshCw size={16} />
-          Refresh
+          {t("Refresh")}
         </button>
       </div>
 
@@ -607,7 +608,7 @@ PatientConcernPanel() {
           htmlFor="assigned-doctor"
           style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
         >
-          Select assigned doctor
+          {t("Select assigned doctor")}
         </label>
 
         <select
@@ -617,18 +618,17 @@ PatientConcernPanel() {
           required
           style={{ width: "100%", marginBottom: 15 }}
         >
-          <option value="">Choose a doctor</option>
+          <option value="">{t("Choose a doctor")}</option>
           {assignments.map((assignment) => (
             <option key={assignment.id} value={assignment.doctor_id}>
-              Doctor — {assignment.doctor_id}
+              {t("Doctor")} — {assignment.doctor_id}
             </option>
           ))}
         </select>
 
         {assignments.length === 0 && !loading && (
           <p style={{ color: "#b7791f", fontSize: 13 }}>
-            No doctor has been assigned to your account yet. Contact the
-            CareBridge administrator.
+            {t("No doctor has been assigned to your account yet. Contact the CareBridge administrator.")}
           </p>
         )}
 
@@ -636,7 +636,7 @@ PatientConcernPanel() {
           htmlFor="concern-subject"
           style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
         >
-          Subject
+          {t("Subject")}
         </label>
 
         <input
@@ -644,7 +644,7 @@ PatientConcernPanel() {
           type="text"
           value={subject}
           onChange={(event) => setSubject(event.target.value)}
-          placeholder="Example: Question about my medication"
+          placeholder={t("Example: Question about my medication")}
           maxLength={150}
           required
           style={{ width: "100%", marginBottom: 15 }}
@@ -654,14 +654,14 @@ PatientConcernPanel() {
           htmlFor="concern-message"
           style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
         >
-          Describe your concern
+          {t("Describe your concern")}
         </label>
 
         <textarea
           id="concern-message"
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder="Write your question or concern..."
+          placeholder={t("Write your question or concern...")}
           rows={4}
           maxLength={3000}
           required
@@ -678,17 +678,17 @@ PatientConcernPanel() {
           disabled={saving || loading || assignments.length === 0}
         >
           <Send size={17} />
-          {saving ? "Sending..." : "Submit concern"}
+          {saving ? t("Sending...") : t("Submit concern")}
         </button>
       </form>
 
-      <h3 style={{ marginBottom: 12 }}>My submitted concerns</h3>
+      <h3 style={{ marginBottom: 12 }}>{t("My submitted concerns")}</h3>
 
       {loading ? (
-        <p>Loading your concerns...</p>
+        <p>{t("Loading your concerns...")}</p>
       ) : concerns.length === 0 ? (
         <p style={{ color: "#64746f" }}>
-          You have not submitted any concerns yet.
+          {t("You have not submitted any concerns yet.")}
         </p>
       ) : (
         <div className="medicine-list">
@@ -726,7 +726,7 @@ PatientConcernPanel() {
                           : "#b7791f",
                   }}
                 >
-                  {concern.status.toUpperCase()}
+                  {t(concern.status) || concern.status.toUpperCase()}
                 </span>
               </div>
 
@@ -739,7 +739,7 @@ PatientConcernPanel() {
                   overflowWrap: "anywhere",
                 }}
               >
-                Doctor ID: {concern.doctor_id}
+                {t("Doctor ID")}: {concern.doctor_id}
               </p>
 
               {concern.response ? (
@@ -751,19 +751,19 @@ PatientConcernPanel() {
                     marginTop: 12,
                   }}
                 >
-                  <h4 style={{ marginBottom: 8 }}>
-                    <Reply size={16} /> Doctor's response
+                  <h4 style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                    <Reply size={16} /> {t("Doctor's response")}
                   </h4>
                   <p style={{ margin: 0 }}>{concern.response}</p>
                 </div>
               ) : (
                 <p style={{ color: "#b7791f", fontSize: 13 }}>
-                  Waiting for your doctor to respond.
+                  {t("Waiting for your doctor to respond.")}
                 </p>
               )}
 
               <p style={{ fontSize: 12, color: "#77847f", marginTop: 10 }}>
-                Submitted: {new Date(concern.created_at).toLocaleString("en-IN")}
+                {t("Submitted")}: {new Date(concern.created_at).toLocaleString("en-IN")}
               </p>
             </article>
           ))}
@@ -771,8 +771,7 @@ PatientConcernPanel() {
       )}
 
       <p className="dashboard-disclaimer">
-        This feature is for non-emergency communication. It does not provide
-        emergency medical assistance or replace professional medical care.
+        {t("This feature is for non-emergency communication. It does not provide emergency medical assistance or replace professional medical care.")}
       </p>
     </section>
   );
@@ -802,6 +801,7 @@ function PatientHome({ onLogout }) {
 // --------------------------------------------------
 
 function NotificationDashboard({ onLogout, role }) {
+  const { t } = useLanguage();
   const [notifications, setNotifications] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -939,23 +939,26 @@ function NotificationDashboard({ onLogout, role }) {
           <span>CareBridge</span>
         </div>
 
-        <button className="logout-button" onClick={onLogout}>
-          <LogOut size={17} />
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LanguageSelector />
+          <button className="logout-button" onClick={onLogout}>
+            <LogOut size={17} />
+            {t("Logout")}
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-content">
         <section className="dashboard-welcome">
           <div>
             <p className="dashboard-eyebrow">
-              {role.toUpperCase()} DASHBOARD
+              {t(role === "Nurse" ? "NURSE DASHBOARD" : "CAREGIVER DASHBOARD")}
             </p>
-            <h1>Welcome, {role}!</h1>
+            <h1>{t(role === "Nurse" ? "Welcome, Nurse!" : "Welcome, Caregiver!")}</h1>
             <p>
               {role === "Nurse"
-                ? "Monitor your assigned patients and their medicine alerts."
-                : "Stay informed about the patients you support."}
+                ? t("Monitor your assigned patients and their medicine alerts.")
+                : t("Stay informed about the patients you support.")}
             </p>
           </div>
 
@@ -976,19 +979,18 @@ function NotificationDashboard({ onLogout, role }) {
               <div>
                 <h2>
                   <UserRound size={21} />
-                  Assigned patients
+                  {t("Assigned patients")}
                 </h2>
-                <p>Patients assigned to your approved nurse account.</p>
+                <p>{t("Patients assigned to your approved nurse account.")}</p>
               </div>
               <span style={{ fontWeight: 700 }}>{assignments.length}</span>
             </div>
 
             {loading ? (
-              <p>Loading assignments...</p>
+              <p>{t("Loading assignments...")}</p>
             ) : assignments.length === 0 ? (
               <p style={{ color: "#64746f" }}>
-                No active patients have been assigned to your account yet.
-                Contact the CareBridge administrator.
+                {t("No active patients have been assigned to your account yet. Contact the CareBridge administrator.")}
               </p>
             ) : (
               <div className="medicine-list">
@@ -1008,7 +1010,7 @@ function NotificationDashboard({ onLogout, role }) {
                     </div>
 
                     <div className="medicine-info" style={{ flex: 1 }}>
-                      <h3>Assigned Patient {index + 1}</h3>
+                      <h3>{t("Assigned Patient")} {index + 1}</h3>
                       <p style={{ fontSize: 12, overflowWrap: "anywhere" }}>
                         Patient ID: {assignment.patient_id}
                       </p>
@@ -1019,7 +1021,7 @@ function NotificationDashboard({ onLogout, role }) {
                           fontWeight: 600,
                         }}
                       >
-                        ACTIVE ASSIGNMENT
+                        {t("ACTIVE ASSIGNMENT")}
                       </span>
                     </div>
                   </article>
@@ -1034,18 +1036,18 @@ function NotificationDashboard({ onLogout, role }) {
             <div className="stat-icon">
               <Bell />
             </div>
-            <p>Total notifications</p>
+            <p>{t("Total notifications")}</p>
             <h2>{notifications.length}</h2>
-            <span>All alerts received</span>
+            <span>{t("All alerts received")}</span>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon">
               <AlertCircle />
             </div>
-            <p>Unread notifications</p>
+            <p>{t("Unread notifications")}</p>
             <h2>{unreadCount}</h2>
-            <span>Require your attention</span>
+            <span>{t("Require your attention")}</span>
           </article>
         </section>
 
@@ -1054,9 +1056,9 @@ function NotificationDashboard({ onLogout, role }) {
             <div>
               <h2>
                 <Bell size={21} />
-                Patient alerts
+                {t("Patient alerts")}
               </h2>
-              <p>Notifications about missed medicine doses.</p>
+              <p>{t("Notifications about missed medicine doses.")}</p>
             </div>
 
             <button
@@ -1066,7 +1068,7 @@ function NotificationDashboard({ onLogout, role }) {
               disabled={loading}
             >
               <RefreshCw size={16} />
-              Refresh
+              {t("Refresh")}
             </button>
           </div>
 
@@ -1077,14 +1079,13 @@ function NotificationDashboard({ onLogout, role }) {
           )}
 
           {loading ? (
-            <p>Loading notifications...</p>
+            <p>{t("Loading notifications...")}</p>
           ) : notifications.length === 0 ? (
             <div style={{ textAlign: "center", padding: "35px 15px", color: "#64746f" }}>
               <Bell size={35} />
-              <h3>No notifications yet</h3>
+              <h3>{t("No notifications yet")}</h3>
               <p>
-                When an assigned patient misses a medicine dose, their alert
-                will appear here.
+                {t("When an assigned patient misses a medicine dose, their alert will appear here.")}
               </p>
             </div>
           ) : (
@@ -1136,7 +1137,7 @@ function NotificationDashboard({ onLogout, role }) {
                         color: notification.is_read ? "#64746f" : "#b7791f",
                       }}
                     >
-                      {notification.is_read ? "Read" : "Unread"}
+                      {notification.is_read ? t("Read") : t("Unread")}
                     </span>
                   </div>
 
@@ -1148,7 +1149,7 @@ function NotificationDashboard({ onLogout, role }) {
                       onClick={() => markAsRead(notification.id)}
                     >
                       <CheckCircle2 size={15} />
-                      {updatingId === notification.id ? "Saving..." : "Mark read"}
+                      {updatingId === notification.id ? t("Saving...") : t("Mark read")}
                     </button>
                   )}
                 </article>
@@ -1158,8 +1159,7 @@ function NotificationDashboard({ onLogout, role }) {
         </section>
 
         <p className="dashboard-disclaimer">
-          CareBridge provides health-management support, not medical diagnosis.
-          Contact healthcare professionals for medical advice.
+          {t("CareBridge provides health-management support, not medical diagnosis. Contact healthcare professionals for medical advice.")}
         </p>
       </main>
     </div>
@@ -1171,6 +1171,7 @@ function NotificationDashboard({ onLogout, role }) {
 // --------------------------------------------------
 
 function NurseAccess({ onLogout }) {
+  const { t } = useLanguage();
   const [checking, setChecking] = useState(true);
   const [approved, setApproved] = useState(false);
   const [error, setError] = useState("");
@@ -1186,7 +1187,7 @@ function NurseAccess({ onLogout }) {
       } = await supabase.auth.getUser();
 
       if (userError) throw userError;
-      if (!user) throw new Error("Please log in again.");
+      if (!user) throw new Error(t("Please log in again."));
 
       const { data, error: approvalError } = await supabase
         .from("authorized_nurses")
@@ -1198,7 +1199,7 @@ function NurseAccess({ onLogout }) {
 
       setApproved(Boolean(data));
     } catch (err) {
-      setError(err.message || "Unable to verify nurse approval.");
+      setError(err.message || t("Unable to verify nurse approval."));
     } finally {
       setChecking(false);
     }
@@ -1212,7 +1213,7 @@ function NurseAccess({ onLogout }) {
     return (
       <div className="app">
         <main className="main-content">
-          <p>Verifying nurse approval...</p>
+          <p>{t("Verifying nurse approval...")}</p>
         </main>
       </div>
     );
@@ -1223,14 +1224,14 @@ function NurseAccess({ onLogout }) {
       <div className="app">
         <main className="main-content">
           <ShieldAlert size={40} />
-          <h2>Unable to verify account</h2>
+          <h2>{t("Unable to verify account")}</h2>
           <p>{error}</p>
           <button className="continue-button" onClick={checkApproval}>
-            Retry
+            {t("Retry")}
           </button>
           <button className="logout-button" style={{ marginTop: 12 }} onClick={onLogout}>
             <LogOut size={17} />
-            Logout
+            {t("Logout")}
           </button>
         </main>
       </div>
@@ -1244,19 +1245,17 @@ function NurseAccess({ onLogout }) {
           <div className="login-icon">
             <Clock size={30} />
           </div>
-          <h2>Nurse account awaiting approval</h2>
+          <h2>{t("Nurse account awaiting approval")}</h2>
           <p>
-            Your nurse account has been created, but an administrator has not
-            approved it yet. You will be able to access the Nurse Dashboard
-            after approval.
+            {t("Your nurse account has been created, but an administrator has not approved it yet. You will be able to access the Nurse Dashboard after approval.")}
           </p>
           <button className="continue-button" onClick={checkApproval} style={{ marginTop: 20 }}>
             <RefreshCw size={17} />
-            Check approval status
+            {t("Check approval status")}
           </button>
           <button className="logout-button" style={{ marginTop: 12 }} onClick={onLogout}>
             <LogOut size={17} />
-            Logout
+            {t("Logout")}
           </button>
         </main>
       </div>
@@ -1271,6 +1270,7 @@ function NurseAccess({ onLogout }) {
 // --------------------------------------------------
 
 function DoctorDashboard({ onLogout }) {
+  const { t } = useLanguage();
   const [concerns, setConcerns] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [responses, setResponses] = useState({});
@@ -1360,62 +1360,73 @@ function DoctorDashboard({ onLogout }) {
     };
   }, []);
 
-const saveResponse = async (concern) => {
-  const responseText = (
-    responses[concern.id] ?? concern.response ?? ""
-  ).trim();
+  const saveResponse = async (concern) => {
+    const responseText = (
+      responses[concern.id] ?? concern.response ?? ""
+    ).trim();
 
-  if (!responseText) {
-    setError("Write a response before submitting.");
-    return;
-  }
-
-  setSavingId(concern.id);
-  setError("");
-  setNotice("");
-
-  try {
-    const { data, error: updateError } = await supabase
-      .from("patient_concerns")
-      .update({
-        response: responseText,
-        status: "Responded",
-        reviewed_by: currentUserId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", concern.id)
-      .eq("doctor_id", currentUserId)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
-
-    if (!data) {
-      throw new Error(
-        "No concern was updated. Check your doctor assignment and database permissions."
-      );
+    if (!responseText) {
+      setError(t("Write a response before submitting."));
+      return;
     }
 
-    // Update the screen immediately
-    setConcerns((previous) =>
-      previous.map((item) =>
-        item.id === concern.id ? data : item
-      )
-    );
+    setSavingId(concern.id);
+    setError("");
+    setNotice("");
 
-    setResponses((previous) => ({
-      ...previous,
-      [concern.id]: data.response,
-    }));
+    try {
+      let doctorId = currentUserId;
+      if (!doctorId) {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+        if (userError || !user) throw new Error("Please log in again.");
+        doctorId = user.id;
+        setCurrentUserId(doctorId);
+      }
 
-    setNotice("Response submitted successfully.");
-  } catch (err) {
-    console.error("Doctor response error:", err);
-    setError(err.message || "Unable to save your response.");
-  } finally {
-    setSavingId(null);
-  }
-};
+      const { data, error: updateError } = await supabase
+        .from("patient_concerns")
+        .update({
+          response: responseText,
+          status: "Responded",
+          reviewed_by: doctorId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", concern.id)
+        .eq("doctor_id", doctorId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      if (!data) {
+        throw new Error(
+          "No concern was updated. Check your doctor assignment and database permissions."
+        );
+      }
+
+      // Update the screen immediately
+      setConcerns((previous) =>
+        previous.map((item) =>
+          item.id === concern.id ? data : item
+        )
+      );
+
+      setResponses((previous) => ({
+        ...previous,
+        [concern.id]: data.response,
+      }));
+
+      setNotice(t("Response submitted successfully."));
+    } catch (err) {
+      console.error("Doctor response error:", err);
+      setError(err.message || "Unable to save your response.");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
 
   const closeConcern = async (concern) => {
@@ -1457,18 +1468,21 @@ const saveResponse = async (concern) => {
           <span>CareBridge</span>
         </div>
 
-        <button className="logout-button" onClick={onLogout}>
-          <LogOut size={17} />
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LanguageSelector />
+          <button className="logout-button" onClick={onLogout}>
+            <LogOut size={17} />
+            {t("Logout")}
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-content">
         <section className="dashboard-welcome">
           <div>
-            <p className="dashboard-eyebrow">DOCTOR DASHBOARD</p>
-            <h1>Welcome, Doctor!</h1>
-            <p>Review concerns from your assigned patients and provide responses.</p>
+            <p className="dashboard-eyebrow">{t("DOCTOR DASHBOARD")}</p>
+            <h1>{t("Welcome, Doctor!")}</h1>
+            <p>{t("Review concerns from your assigned patients and provide responses.")}</p>
           </div>
 
           <div className="dashboard-profile-icon">
@@ -1481,38 +1495,38 @@ const saveResponse = async (concern) => {
             <div className="stat-icon">
               <Users />
             </div>
-            <p>Assigned patients</p>
+            <p>{t("Assigned patients")}</p>
             <h2>{assignments.length}</h2>
-            <span>Active assignments</span>
+            <span>{t("Active assignments")}</span>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon">
               <MessageSquare />
             </div>
-            <p>Pending concerns</p>
+            <p>{t("Pending concerns")}</p>
             <h2>{pendingCount}</h2>
-            <span>Awaiting response</span>
+            <span>{t("Awaiting response")}</span>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon">
               <CheckCircle2 />
             </div>
-            <p>Responded</p>
+            <p>{t("Responded")}</p>
             <h2>{respondedCount}</h2>
-            <span>Responses submitted</span>
+            <span>{t("Responses submitted")}</span>
           </article>
         </section>
 
         {error && (
-          <p role="alert" style={{ color: "#b42318", padding: 10 }}>
+          <p role="alert" style={{ color: "#b42318", padding: 10, background: "#fff2f0", borderRadius: 8 }}>
             {error}
           </p>
         )}
 
         {notice && (
-          <p role="status" style={{ color: "#167044", padding: 10 }}>
+          <p role="status" style={{ color: "#167044", padding: 10, background: "#f0f8f4", borderRadius: 8 }}>
             {notice}
           </p>
         )}
@@ -1522,9 +1536,9 @@ const saveResponse = async (concern) => {
             <div>
               <h2>
                 <Users size={21} />
-                Assigned patients
+                {t("Assigned patients")}
               </h2>
-              <p>Patients connected to your doctor account.</p>
+              <p>{t("Patients connected to your doctor account.")}</p>
             </div>
 
             <button
@@ -1534,16 +1548,15 @@ const saveResponse = async (concern) => {
               disabled={loading}
             >
               <RefreshCw size={16} />
-              Refresh
+              {t("Refresh")}
             </button>
           </div>
 
           {loading ? (
-            <p>Loading assignments...</p>
+            <p>{t("Loading assignments...")}</p>
           ) : assignments.length === 0 ? (
             <p style={{ color: "#64746f" }}>
-              No patients have been assigned to your account. Contact the
-              CareBridge administrator.
+              {t("No patients have been assigned to your account. Contact the CareBridge administrator.")}
             </p>
           ) : (
             <div className="medicine-list">
@@ -1562,7 +1575,7 @@ const saveResponse = async (concern) => {
                     <UserRound size={20} />
                   </div>
                   <div className="medicine-info" style={{ flex: 1 }}>
-                    <h3>Patient {index + 1}</h3>
+                    <h3>{t("Patient")} {index + 1}</h3>
                     <p style={{ fontSize: 12, overflowWrap: "anywhere" }}>
                       Patient ID: {assignment.patient_id}
                     </p>
@@ -1578,9 +1591,9 @@ const saveResponse = async (concern) => {
             <div>
               <h2>
                 <MessageSquare size={21} />
-                Patient concerns
+                {t("Patient concerns")}
               </h2>
-              <p>Review patient messages and submit your responses.</p>
+              <p>{t("Review patient messages and submit your responses.")}</p>
             </div>
 
             <button
@@ -1590,17 +1603,17 @@ const saveResponse = async (concern) => {
               disabled={loading}
             >
               <RefreshCw size={16} />
-              Refresh
+              {t("Refresh")}
             </button>
           </div>
 
           {loading ? (
-            <p>Loading patient concerns...</p>
+            <p>{t("Loading patient concerns...")}</p>
           ) : concerns.length === 0 ? (
             <div style={{ textAlign: "center", padding: "35px 15px", color: "#64746f" }}>
               <FileText size={35} />
-              <h3>No concerns received</h3>
-              <p>New concerns from your assigned patients will appear here.</p>
+              <h3>{t("No concerns received")}</h3>
+              <p>{t("New concerns from your assigned patients will appear here.")}</p>
             </div>
           ) : (
             <div className="medicine-list">
@@ -1637,7 +1650,7 @@ const saveResponse = async (concern) => {
                               : "#b7791f",
                       }}
                     >
-                      {concern.status.toUpperCase()}
+                      {t(concern.status) || concern.status.toUpperCase()}
                     </span>
                   </div>
 
@@ -1663,7 +1676,7 @@ const saveResponse = async (concern) => {
                   </div>
 
                   <p style={{ fontSize: 12, color: "#77847f", marginTop: 10 }}>
-                    Received: {new Date(concern.created_at).toLocaleString("en-IN")}
+                    {t("Received") || "Received"}: {new Date(concern.created_at).toLocaleString("en-IN")}
                   </p>
 
                   {concern.status !== "Closed" && (
@@ -1677,7 +1690,7 @@ const saveResponse = async (concern) => {
                           marginBottom: 8,
                         }}
                       >
-                        Your response
+                        {t("Your response")}
                       </label>
 
                       <textarea
@@ -1691,7 +1704,7 @@ const saveResponse = async (concern) => {
                             [concern.id]: event.target.value,
                           }))
                         }
-                        placeholder="Write your response..."
+                        placeholder={t("Write your response...")}
                         style={{
                           width: "100%",
                           resize: "vertical",
@@ -1699,7 +1712,7 @@ const saveResponse = async (concern) => {
                         }}
                       />
 
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                         <button
                           className="continue-button"
                           type="button"
@@ -1708,8 +1721,8 @@ const saveResponse = async (concern) => {
                         >
                           <Reply size={16} />
                           {savingId === concern.id
-                            ? "Saving..."
-                            : "Submit response"}
+                            ? t("Saving...")
+                            : t("Submit response")}
                         </button>
 
                         {concern.status === "Responded" && (
@@ -1720,7 +1733,7 @@ const saveResponse = async (concern) => {
                             onClick={() => closeConcern(concern)}
                           >
                             <CheckCircle2 size={16} />
-                            Close concern
+                            {t("Close concern")}
                           </button>
                         )}
                       </div>
@@ -1728,8 +1741,8 @@ const saveResponse = async (concern) => {
                   )}
 
                   {concern.status === "Closed" && (
-                    <p style={{ color: "#64746f", fontWeight: 600 }}>
-                      This concern has been closed.
+                    <p style={{ color: "#64746f", fontWeight: 600, marginTop: 12 }}>
+                      {t("This concern has been closed.")}
                     </p>
                   )}
                 </article>
@@ -1739,8 +1752,7 @@ const saveResponse = async (concern) => {
         </section>
 
         <p className="dashboard-disclaimer">
-          CareBridge supports communication and care coordination. It does not
-          replace clinical judgement or emergency medical services.
+          {t("CareBridge supports communication and care coordination. It does not replace clinical judgement or emergency medical services.")}
         </p>
       </main>
     </div>
@@ -1752,6 +1764,7 @@ const saveResponse = async (concern) => {
 // --------------------------------------------------
 
 function DoctorAccess({ onLogout }) {
+  const { t } = useLanguage();
   const [checking, setChecking] = useState(true);
   const [approved, setApproved] = useState(false);
   const [error, setError] = useState("");
@@ -1767,7 +1780,7 @@ function DoctorAccess({ onLogout }) {
       } = await supabase.auth.getUser();
 
       if (userError) throw userError;
-      if (!user) throw new Error("Please log in again.");
+      if (!user) throw new Error(t("Please log in again."));
 
       const { data, error: approvalError } = await supabase
         .from("authorized_doctors")
@@ -1779,7 +1792,7 @@ function DoctorAccess({ onLogout }) {
 
       setApproved(Boolean(data));
     } catch (err) {
-      setError(err.message || "Unable to verify doctor approval.");
+      setError(err.message || t("Unable to verify doctor approval."));
     } finally {
       setChecking(false);
     }
@@ -1793,7 +1806,7 @@ function DoctorAccess({ onLogout }) {
     return (
       <div className="app">
         <main className="main-content">
-          <p>Verifying doctor approval...</p>
+          <p>{t("Verifying doctor approval...")}</p>
         </main>
       </div>
     );
@@ -1804,14 +1817,14 @@ function DoctorAccess({ onLogout }) {
       <div className="app">
         <main className="main-content">
           <ShieldAlert size={40} />
-          <h2>Unable to verify account</h2>
+          <h2>{t("Unable to verify account")}</h2>
           <p>{error}</p>
           <button className="continue-button" onClick={checkApproval}>
-            Retry
+            {t("Retry")}
           </button>
           <button className="logout-button" style={{ marginTop: 12 }} onClick={onLogout}>
             <LogOut size={17} />
-            Logout
+            {t("Logout")}
           </button>
         </main>
       </div>
@@ -1825,18 +1838,17 @@ function DoctorAccess({ onLogout }) {
           <div className="login-icon">
             <Clock size={30} />
           </div>
-          <h2>Doctor account awaiting approval</h2>
+          <h2>{t("Doctor account awaiting approval")}</h2>
           <p>
-            Your doctor account has been created, but an administrator has not
-            approved it yet. You can access the Doctor Dashboard after approval.
+            {t("Your doctor account has been created, but an administrator has not approved it yet. You can access the Doctor Dashboard after approval.")}
           </p>
           <button className="continue-button" onClick={checkApproval} style={{ marginTop: 20 }}>
             <RefreshCw size={17} />
-            Check approval status
+            {t("Check approval status")}
           </button>
           <button className="logout-button" style={{ marginTop: 12 }} onClick={onLogout}>
             <LogOut size={17} />
-            Logout
+            {t("Logout")}
           </button>
         </main>
       </div>
@@ -1855,6 +1867,7 @@ function DoctorAccess({ onLogout }) {
  // --------------------------------------------------
 
 function App() {
+  const { t } = useLanguage();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
@@ -1862,7 +1875,6 @@ function App() {
   const [adminChecking, setAdminChecking] = useState(true);
 
   const [selectedRole, setSelectedRole] = useState(null);
-  const [language, setLanguage] = useState("English");
   const [authMode, setAuthMode] = useState("login");
 
   const [fullName, setFullName] = useState("");
@@ -2163,20 +2175,7 @@ function App() {
           <span>CareBridge</span>
         </div>
 
-        <div className="language-select">
-          <Globe size={17} />
-
-          <select
-            value={language}
-            onChange={(event) => setLanguage(event.target.value)}
-            aria-label="Select language"
-          >
-            <option value="English">English</option>
-            <option value="ಕನ್ನಡ">ಕನ್ನಡ</option>
-            <option value="हिन्दी">हिन्दी</option>
-            <option value="తెలుగు">తెలుగు</option>
-          </select>
-        </div>
+        <LanguageSelector />
       </header>
 
       <main className="main-content">
@@ -2185,32 +2184,30 @@ function App() {
             <section className="welcome-section">
               <div className="welcome-tag">
                 <HeartPulse size={15} />
-                Healthcare, connected
+                {t("Healthcare, connected")}
               </div>
 
               <h1>
-                Better care.
+                {t("Better care.")}
                 <br />
-                <span>Closer to you.</span>
+                <span>{t("Closer to you.")}</span>
               </h1>
 
               <p className="welcome-description">
-                Your health journey, connected with the people who care.
-                Manage medicines, stay informed and connect with healthcare
-                professionals through one simple platform.
+                {t("Your health journey, connected with the people who care. Manage medicines, stay informed and connect with healthcare professionals through one simple platform.")}
               </p>
 
               <div className="trust-note">
                 <ShieldCheck size={18} />
-                Patient-focused · Secure by design · Accessible healthcare
+                {t("Patient-focused · Secure by design · Accessible healthcare")}
               </div>
             </section>
 
             <section className="role-section">
               <div className="section-heading">
                 <div>
-                  <h2>Welcome to CareBridge</h2>
-                  <p>Select your role to continue</p>
+                  <h2>{t("Welcome to CareBridge")}</h2>
+                  <p>{t("Select your role to continue")}</p>
                 </div>
               </div>
 
@@ -2236,10 +2233,10 @@ function App() {
                       </div>
 
                       <div className="role-details">
-                        <h3>{role.name}</h3>
-                        <p>{role.description}</p>
+                        <h3>{t(role.name)}</h3>
+                        <p>{t(role.description)}</p>
 
-                        {!enabled && <small>Coming soon</small>}
+                        {!enabled && <small>{t("Coming soon")}</small>}
 
                         {[
                           "Nurse",
@@ -2247,7 +2244,7 @@ function App() {
                           "Hospital",
                           "Volunteer",
                         ].includes(role.name) && (
-                          <small>Administrator approval required</small>
+                          <small>{t("Administrator approval required")}</small>
                         )}
                       </div>
 
@@ -2262,7 +2259,7 @@ function App() {
           <section className="login-section">
             <button className="back-button" onClick={handleBack}>
               <ArrowLeft size={17} />
-              Back to roles
+              {t("Back to roles")}
             </button>
 
             <div className="login-icon">
@@ -2270,8 +2267,8 @@ function App() {
             </div>
 
             <h2>
-              {selectedRole}{" "}
-              {authMode === "login" ? "Login" : "Registration"}
+              {t(selectedRole)}{" "}
+              {authMode === "login" ? t("Login") : t("Registration")}
             </h2>
 
             <p className="login-description">
@@ -2287,8 +2284,7 @@ function App() {
               "Volunteer",
             ].includes(selectedRole) && (
               <p className="demo-note">
-                {selectedRole} accounts require administrator approval
-                before dashboard access.
+                {selectedRole} {t("accounts require administrator approval before dashboard access.")}
               </p>
             )}
 
@@ -2301,7 +2297,7 @@ function App() {
                   setMessage("");
                 }}
               >
-                Login
+                {t("Login")}
               </button>
 
               <button
@@ -2312,19 +2308,19 @@ function App() {
                   setMessage("");
                 }}
               >
-                Register
+                {t("Register")}
               </button>
             </div>
 
             <form onSubmit={handleSubmit}>
               {authMode === "register" && (
                 <>
-                  <label htmlFor="fullName">Full name</label>
+                  <label htmlFor="fullName">{t("Full name")}</label>
 
                   <input
                     id="fullName"
                     type="text"
-                    placeholder="Enter your full name"
+                    placeholder={t("Enter your full name")}
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
                     autoComplete="name"
@@ -2334,24 +2330,24 @@ function App() {
                 </>
               )}
 
-              <label htmlFor="email">Email address</label>
+              <label htmlFor="email">{t("Email address")}</label>
 
               <input
                 id="email"
                 type="email"
-                placeholder="Enter your email"
+                placeholder={t("Enter your email")}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 required
               />
 
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">{t("Password")}</label>
 
               <input
                 id="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder={t("Enter your password")}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={
@@ -2369,10 +2365,10 @@ function App() {
                 disabled={authLoading}
               >
                 {authLoading
-                  ? "Please wait..."
+                  ? t("Please wait...")
                   : authMode === "login"
-                    ? "Continue"
-                    : "Create account"}
+                    ? t("Continue")
+                    : t("Create account")}
 
                 {!authLoading && <ArrowRight size={18} />}
               </button>

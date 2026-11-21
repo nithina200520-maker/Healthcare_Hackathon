@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
       return respond({ error: "Invalid or expired login session." }, 401);
     }
 
-    const { reportId, storagePath, mimeType, fileBase64 } = await req.json();
+    const { reportId, storagePath, mimeType, fileBase64, language } = await req.json();
 
     if (!reportId || !storagePath) {
       return respond({ error: "Missing reportId or storagePath in request body." }, 400);
@@ -136,9 +136,37 @@ Deno.serve(async (req) => {
       );
     }
 
+    const isKannada =
+      language === "ಕನ್ನಡ" ||
+      language === "Kannada" ||
+      language === "kn" ||
+      (typeof language === "string" && language.toLowerCase().includes("kannada"));
+
+    const languageInstruction = isKannada
+      ? `
+CRITICAL LANGUAGE REQUIREMENT:
+The user selected Kannada (ಕನ್ನಡ) language for the application.
+You MUST write all generated text values in the JSON output in Kannada script (ಕನ್ನಡ ಲಿಪಿ).
+Specifically:
+- "report_type": Translated into Kannada (e.g., "ಕೈ ಎಕ್ಸ್-ರೇ (ಸಾದಾ ರೇಡಿಯೋಗ್ರಾಫ್)", "ಸಂಪೂರ್ಣ ರಕ್ತ ಪರೀಕ್ಷೆ (CBC)", "ಇಸಿಜಿ ವರದಿ")
+- "summary": Written completely in clear, empathetic Kannada
+- "extracted_values": Translate "parameter" names and "status" (ಸಾಮಾನ್ಯ / ಅಧಿಕ / ಕಡಿಮೆ / ಗಮನಿಸಿ) into Kannada
+- "simple_explanation": Written completely in plain, simple Kannada that a patient can easily understand
+- "attention_findings": Bullet points written in Kannada
+- "doctor_questions": Questions written in Kannada that the patient can ask their doctor
+- "disclaimer": Written in Kannada
+Do NOT return English for the descriptive contents when Kannada is requested.
+`
+      : `
+LANGUAGE:
+Respond in English.
+`;
+
     const clinicalSystemPrompt = `
 You are an expert healthcare AI assistant for CareBridge, a healthcare coordination platform.
 Your task is to analyze the provided medical report (such as Blood Test, ECG, X-Ray, Lab Report, or Medical Document) and provide a clear, patient-friendly, and medically cautious breakdown.
+
+${languageInstruction}
 
 STRICT MEDICAL SAFETY RULES:
 1. INFORMATIONAL ONLY: This analysis is for patient education and preparation for doctor consultation. It is NOT a medical diagnosis, clinical opinion, or prescription.

@@ -11,8 +11,10 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useLanguage, LanguageSelector } from "../context/LanguageContext";
 
 export default function HospitalAccess({ onLogout }) {
+  const { t } = useLanguage();
   const [checking, setChecking] = useState(true);
   const [hospital, setHospital] = useState(null);
   const [patients, setPatients] = useState([]);
@@ -29,7 +31,7 @@ export default function HospitalAccess({ onLogout }) {
       } = await supabase.auth.getUser();
 
       if (userError) throw userError;
-      if (!user) throw new Error("Please log in again.");
+      if (!user) throw new Error(t("Please log in again."));
 
       // Verify that this hospital account is approved.
       const { data: hospitalData, error: hospitalError } = await supabase
@@ -60,7 +62,7 @@ export default function HospitalAccess({ onLogout }) {
 
       setPatients(patientData || []);
     } catch (err) {
-      setError(err.message || "Unable to load the hospital dashboard.");
+      setError(err.message || t("Unable to load the hospital dashboard."));
     } finally {
       setChecking(false);
     }
@@ -80,22 +82,24 @@ export default function HospitalAccess({ onLogout }) {
           <span>CareBridge</span>
         </div>
 
-        <button className="logout-button" onClick={onLogout}>
-          <LogOut size={17} />
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LanguageSelector />
+          <button className="logout-button" onClick={onLogout}>
+            <LogOut size={17} />
+            {t("Logout")}
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-content">
         <section className="dashboard-welcome">
           <div>
-            <p className="dashboard-eyebrow">HOSPITAL DASHBOARD</p>
+            <p className="dashboard-eyebrow">{t("HOSPITAL DASHBOARD")}</p>
             <h1>
-              Welcome, {hospital?.hospital_name || "Hospital"}!
+              {t("Welcome, Hospital!")}
             </h1>
             <p>
-              Coordinate patient assignments and monitor your hospital's
-              connected patients.
+              {t("Coordinate patient assignments and monitor your hospital's connected patients.")}
             </p>
           </div>
 
@@ -115,14 +119,14 @@ export default function HospitalAccess({ onLogout }) {
               onClick={loadHospitalDashboard}
             >
               <RefreshCw size={16} />
-              Retry
+              {t("Retry")}
             </button>
           </section>
         )}
 
         {checking ? (
           <section className="dashboard-panel">
-            <p>Verifying hospital approval and loading patients...</p>
+            <p>{t("Loading...")}</p>
           </section>
         ) : !error && !hospital ? (
           <section
@@ -133,12 +137,10 @@ export default function HospitalAccess({ onLogout }) {
               <Clock size={30} />
             </div>
 
-            <h2>Hospital account awaiting approval</h2>
+            <h2>{t("Hospital account awaiting approval")}</h2>
 
             <p>
-              Your hospital account has been created, but an administrator
-              has not approved it yet. Your dashboard will become available
-              after approval.
+              {t("Your hospital account has been created, but an administrator has not approved it yet. Your dashboard will become available after approval.")}
             </p>
 
             <button
@@ -148,7 +150,7 @@ export default function HospitalAccess({ onLogout }) {
               style={{ marginTop: 15 }}
             >
               <RefreshCw size={17} />
-              Check approval status
+              {t("Check approval status")}
             </button>
           </section>
         ) : !error && hospital ? (
@@ -158,20 +160,20 @@ export default function HospitalAccess({ onLogout }) {
                 <div className="stat-icon">
                   <Users />
                 </div>
-                <p>Active patients</p>
+                <p>{t("Active patients") || "Active patients"}</p>
                 <h2>{patients.length}</h2>
-                <span>Currently assigned</span>
+                <span>{t("Currently assigned") || "Currently assigned"}</span>
               </article>
 
               <article className="stat-card">
                 <div className="stat-icon">
                   <Hospital />
                 </div>
-                <p>Hospital status</p>
+                <p>{t("Status")}</p>
                 <h2 style={{ fontSize: 22, color: "#167044" }}>
-                  Approved
+                  {t("Approved") || "Approved"}
                 </h2>
-                <span>Authorized account</span>
+                <span>{t("Authorized account") || "Authorized account"}</span>
               </article>
             </section>
 
@@ -180,10 +182,10 @@ export default function HospitalAccess({ onLogout }) {
                 <div>
                   <h2>
                     <UserRound size={21} />
-                    Assigned patients
+                    {t("Assigned patients")}
                   </h2>
                   <p>
-                    Patients currently assigned to your hospital.
+                    {t("Patients currently assigned to your hospital.") || "Patients currently assigned to your hospital."}
                   </p>
                 </div>
 
@@ -194,14 +196,13 @@ export default function HospitalAccess({ onLogout }) {
                   disabled={checking}
                 >
                   <RefreshCw size={16} />
-                  Refresh
+                  {t("Refresh")}
                 </button>
               </div>
 
               {patients.length === 0 ? (
                 <p style={{ color: "#64746f" }}>
-                  No patients have been assigned to this hospital yet.
-                  Contact the CareBridge administrator.
+                  {t("No patients have been assigned to this hospital yet. Contact the CareBridge administrator.") || "No patients have been assigned to this hospital yet."}
                 </p>
               ) : (
                 <div className="medicine-list">
@@ -221,7 +222,7 @@ export default function HospitalAccess({ onLogout }) {
                       </div>
 
                       <div className="medicine-info" style={{ flex: 1 }}>
-                        <h3>Patient {index + 1}</h3>
+                        <h3>{t("Patient")} {index + 1}</h3>
 
                         <p
                           style={{
@@ -239,7 +240,7 @@ export default function HospitalAccess({ onLogout }) {
                             fontWeight: 600,
                           }}
                         >
-                          ACTIVE ASSIGNMENT
+                          {t("ACTIVE ASSIGNMENT")}
                         </span>
                       </div>
                     </article>
@@ -249,8 +250,7 @@ export default function HospitalAccess({ onLogout }) {
             </section>
 
             <p className="dashboard-disclaimer">
-              CareBridge supports healthcare coordination. Patient
-              assignments should be managed by authorized administrators.
+              {t("CareBridge supports healthcare coordination. Patient assignments should be managed by authorized administrators.") || "CareBridge supports healthcare coordination."}
             </p>
           </>
         ) : null}

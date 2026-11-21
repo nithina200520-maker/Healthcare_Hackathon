@@ -30,6 +30,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useLanguage, LanguageSelector } from "../context/LanguageContext";
 
 const ROLES = ["Doctor", "Nurse", "Hospital", "Volunteer"];
 
@@ -64,6 +65,7 @@ function MetricCard({ icon: Icon, label, value, description }) {
 }
 
 export default function AdminAccess({ onLogout }) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [admin, setAdmin] = useState(null);
   const [currentUserId, setCurrentUserId] = useState("");
@@ -730,10 +732,13 @@ export default function AdminAccess({ onLogout }) {
           <span>CareBridge</span>
         </div>
 
-        <button className="logout-button" onClick={onLogout}>
-          <LogOut size={17} />
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LanguageSelector />
+          <button className="logout-button" onClick={onLogout}>
+            <LogOut size={17} />
+            {t("Logout")}
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-content">
@@ -825,7 +830,7 @@ export default function AdminAccess({ onLogout }) {
                     }}
                   >
                     <Icon size={16} />
-                    <span>{tab.label}</span>
+                    <span>{t(tab.label)}</span>
                     {tab.badge !== undefined && tab.badge !== null && (
                       <span
                         style={{

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import MedicalReportAnalyser from "./MedicalReportAnalyser";
+import { useLanguage, LanguageSelector } from "../context/LanguageContext";
 
 import {
   HeartPulse,
@@ -86,6 +87,7 @@ function getEmptyDay(date) {
 }
 
 function PatientDashboard({ onLogout }) {
+  const { t } = useLanguage();
   const [medicines, setMedicines] = useState([]);
   const [weeklyStats, setWeeklyStats] = useState([]);
 
@@ -502,6 +504,8 @@ function PatientDashboard({ onLogout }) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LanguageSelector />
+
           <button
             type="button"
             className="emergency-sos-top-btn"
@@ -513,12 +517,12 @@ function PatientDashboard({ onLogout }) {
           >
             <span className="sos-pulse-ring" />
             <PhoneCall size={16} />
-            <span>EMERGENCY SOS (112)</span>
+            <span>{t("EMERGENCY SOS (112)")}</span>
           </button>
 
           <button className="logout-button" onClick={onLogout}>
             <LogOut size={17} />
-            Logout
+            {t("Logout")}
           </button>
         </div>
       </header>
@@ -530,10 +534,10 @@ function PatientDashboard({ onLogout }) {
             <AlertTriangle size={24} style={{ color: "#d92d20", flexShrink: 0 }} />
             <div>
               <strong style={{ display: "block", color: "#912018", fontSize: "14px" }}>
-                Emergency Medical Assistance Available (Dial 112)
+                {t("Emergency Assistance Available (Dial 112)")}
               </strong>
               <span style={{ fontSize: "13px", color: "#7a271a" }}>
-                In a critical or life-threatening situation, connect directly with national emergency responders.
+                {t("In a critical or life-threatening situation, connect directly with national emergency responders.")}
               </span>
             </div>
           </div>
@@ -546,17 +550,17 @@ function PatientDashboard({ onLogout }) {
             }}
           >
             <PhoneCall size={16} />
-            Call Emergency (112)
+            {t("Call Emergency (112)")}
           </button>
         </div>
 
         <section className="dashboard-welcome">
           <div>
             <p className="dashboard-eyebrow">
-              PATIENT DASHBOARD
+              {t("PATIENT DASHBOARD")}
             </p>
-            <h1>Good day!</h1>
-            <p>Here's your health overview for today.</p>
+            <h1>{t("Good day!")}</h1>
+            <p>{t("Here's your health overview for today.")}</p>
           </div>
 
           <div className="dashboard-profile-icon">
@@ -568,38 +572,37 @@ function PatientDashboard({ onLogout }) {
         <section className="dashboard-stats">
           <article className="stat-card">
             <div className="stat-icon"><Pill /></div>
-            <p>Scheduled medicines</p>
+            <p>{t("Scheduled medicines")}</p>
             <h2>{medicines.length}</h2>
-            <span>Today's schedule</span>
+            <span>{t("Today's schedule")}</span>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon"><CheckCircle2 /></div>
-            <p>Doses taken</p>
+            <p>{t("Doses taken")}</p>
             <h2>{takenCount}/{medicines.length}</h2>
-            <span>Today's progress</span>
+            <span>{t("Today's progress")}</span>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon"><AlertCircle /></div>
-            <p>Skipped doses</p>
+            <p>{t("Skipped doses")}</p>
             <h2>{skippedCount}</h2>
-            <span>Today's skipped doses</span>
+            <span>{t("Today's skipped doses")}</span>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon"><Clock /></div>
-            <p>Pending doses</p>
+            <p>{t("Pending doses")}</p>
             <h2>{pendingCount}</h2>
-            <span>Awaiting action</span>
+            <span>{t("Awaiting action")}</span>
           </article>
         </section>
 
         {missedCount > 0 && (
           <div className="status-missed">
             <AlertCircle size={18} />
-            {missedCount} dose(s) have passed their 30-minute
-            grace period.
+            {missedCount} {t("dose(s) have passed their 30-minute grace period.")}
           </div>
         )}
 
@@ -621,14 +624,14 @@ function PatientDashboard({ onLogout }) {
             <div>
               <h2>
                 <TrendingUp size={21} />
-                Weekly medicine adherence
+                {t("Weekly medicine adherence")}
               </h2>
-              <p>Your medicine-taking progress over the last 7 days.</p>
+              <p>{t("Your medicine-taking progress over the last 7 days.")}</p>
             </div>
           </div>
 
           {loading ? (
-            <p>Calculating your weekly progress...</p>
+            <p>{t("Loading...")}</p>
           ) : (
             <>
               <div
@@ -640,28 +643,28 @@ function PatientDashboard({ onLogout }) {
                 }}
               >
                 <div style={summaryCardStyle}>
-                  <span style={summaryLabelStyle}>Adherence rate</span>
+                  <span style={summaryLabelStyle}>{t("Adherence rate")}</span>
                   <strong style={{ fontSize: "28px", color: "#087f68" }}>
                     {weeklyPercentage}%
                   </strong>
                 </div>
 
                 <div style={summaryCardStyle}>
-                  <span style={summaryLabelStyle}>Doses taken</span>
+                  <span style={summaryLabelStyle}>{t("Doses taken")}</span>
                   <strong style={{ fontSize: "28px", color: "#087f68" }}>
                     {weeklyTaken}
                   </strong>
                 </div>
 
                 <div style={summaryCardStyle}>
-                  <span style={summaryLabelStyle}>Missed doses</span>
+                  <span style={summaryLabelStyle}>{t("Missed doses")}</span>
                   <strong style={{ fontSize: "28px", color: "#b42318" }}>
                     {weeklyMissed}
                   </strong>
                 </div>
 
                 <div style={summaryCardStyle}>
-                  <span style={summaryLabelStyle}>Skipped doses</span>
+                  <span style={summaryLabelStyle}>{t("Skipped doses")}</span>
                   <strong style={{ fontSize: "28px", color: "#b7791f" }}>
                     {weeklySkipped}
                   </strong>
@@ -670,7 +673,7 @@ function PatientDashboard({ onLogout }) {
 
               <div style={{ marginTop: "24px" }}>
                 <h3 style={{ fontSize: "16px", marginBottom: "16px" }}>
-                  Daily adherence
+                  {t("Daily adherence")}
                 </h3>
 
                 <div
@@ -781,9 +784,9 @@ function PatientDashboard({ onLogout }) {
             <div>
               <h2>
                 <CalendarDays size={21} />
-                Medicine schedule
+                {t("Medicine schedule")}
               </h2>
-              <p>Keep track of your scheduled doses.</p>
+              <p>{t("Keep track of your scheduled doses.")}</p>
             </div>
 
             <button
@@ -792,7 +795,7 @@ function PatientDashboard({ onLogout }) {
               onClick={() => setShowAddForm(!showAddForm)}
             >
               {showAddForm ? <X size={17} /> : <Plus size={17} />}
-              {showAddForm ? "Cancel" : "Add"}
+              {showAddForm ? t("Cancel") : t("Add")}
             </button>
           </div>
 
@@ -801,16 +804,16 @@ function PatientDashboard({ onLogout }) {
               className="add-medicine-form"
               onSubmit={addMedicine}
             >
-              <h3>Add a medicine</h3>
+              <h3>{t("Add a medicine")}</h3>
 
               <label htmlFor="medicine-name">
-                Medicine name
+                {t("Medicine name")}
               </label>
 
               <input
                 id="medicine-name"
                 type="text"
-                placeholder="Enter medicine name"
+                placeholder={t("Enter medicine name")}
                 value={newMedicineName}
                 onChange={(event) =>
                   setNewMedicineName(event.target.value)
@@ -820,7 +823,7 @@ function PatientDashboard({ onLogout }) {
               />
 
               <label htmlFor="medicine-time">
-                Scheduled time
+                {t("Scheduled time")}
               </label>
 
               <input
@@ -839,18 +842,17 @@ function PatientDashboard({ onLogout }) {
                 disabled={saving}
               >
                 <Plus size={17} />
-                {saving ? "Saving..." : "Save medicine"}
+                {saving ? t("Saving...") : t("Save medicine")}
               </button>
             </form>
           )}
 
           <div className="medicine-list">
             {loading ? (
-              <p>Loading your medicines...</p>
+              <p>{t("Loading your medicines...")}</p>
             ) : medicines.length === 0 ? (
               <p>
-                No medicines added yet. Click Add to create
-                your schedule.
+                {t("No medicines added yet. Click Add to create your schedule.")}
               </p>
             ) : (
               medicines.map((medicine) => (
@@ -874,12 +876,12 @@ function PatientDashboard({ onLogout }) {
                     {medicine.status === "Taken" ? (
                       <span className="status-taken">
                         <CheckCircle2 size={15} />
-                        Taken
+                        {t("Taken")}
                       </span>
                     ) : medicine.status === "Skipped" ? (
                       <span className="status-skipped">
                         <XCircle size={15} />
-                        Skipped
+                        {t("Skipped")}
                       </span>
                     ) : (
                       <>
@@ -893,7 +895,7 @@ function PatientDashboard({ onLogout }) {
                           {medicine.status === "Missed" && (
                             <AlertCircle size={15} />
                           )}
-                          {medicine.status}
+                          {t(medicine.status)}
                         </span>
 
                         <div className="medicine-buttons">
@@ -906,8 +908,8 @@ function PatientDashboard({ onLogout }) {
                             }
                           >
                             {actionId === medicine.id
-                              ? "Saving..."
-                              : "Mark taken"}
+                              ? t("Saving...")
+                              : t("Mark taken")}
                           </button>
 
                           <button
@@ -918,7 +920,7 @@ function PatientDashboard({ onLogout }) {
                               updateDoseStatus(medicine, "Skipped")
                             }
                           >
-                            Skip
+                            {t("Skip")}
                           </button>
                         </div>
                       </>
@@ -934,7 +936,7 @@ function PatientDashboard({ onLogout }) {
         <MedicalReportAnalyser />
 
         <section className="dashboard-quick-actions">
-          <h2>Quick actions</h2>
+          <h2>{t("Quick actions")}</h2>
 
           <div className="quick-action-grid">
             <button
@@ -950,7 +952,7 @@ function PatientDashboard({ onLogout }) {
               }}
             >
               <MessageCircle size={22} />
-              <span>Contact doctor</span>
+              <span>{t("Contact doctor")}</span>
             </button>
 
             <button
@@ -966,7 +968,7 @@ function PatientDashboard({ onLogout }) {
               }}
             >
               <AlertCircle size={22} />
-              <span>Report a concern</span>
+              <span>{t("Report a concern")}</span>
             </button>
 
             <button
@@ -982,15 +984,13 @@ function PatientDashboard({ onLogout }) {
               }}
             >
               <Phone size={22} style={{ color: "#d92d20" }} />
-              <span style={{ color: "#b42318", fontWeight: 700 }}>Emergency SOS (112)</span>
+              <span style={{ color: "#b42318", fontWeight: 700 }}>{t("Emergency SOS (112)")}</span>
             </button>
           </div>
         </section>
 
         <p className="dashboard-disclaimer">
-          CareBridge provides health-management support, not
-          medical diagnosis. Follow your healthcare
-          professional's instructions.
+          {t("CareBridge provides health-management support, not medical diagnosis. Follow your healthcare professional's instructions.")}
         </p>
       </main>
 
@@ -1014,19 +1014,19 @@ function PatientDashboard({ onLogout }) {
                 <AlertTriangle size={24} />
               </div>
               <div>
-                <h3 id="sos-modal-title">EMERGENCY SOS: 112</h3>
+                <h3 id="sos-modal-title">{t("EMERGENCY SOS: 112")}</h3>
                 <span style={{ fontSize: 13, color: "#7a271a" }}>
-                  National Emergency Services Hotline
+                  {t("National Emergency Services Hotline")}
                 </span>
               </div>
             </div>
 
             <div className="emergency-modal-body">
               <p style={{ margin: "0 0 12px", fontWeight: 600, fontSize: 15, color: "#1e293b" }}>
-                Are you experiencing a medical emergency?
+                {t("Are you experiencing a medical emergency?")}
               </p>
               <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
-                Clicking <strong>&quot;Open Device Dialler (112)&quot;</strong> will open your phone or device keypad with the emergency number <strong>112</strong> pre-filled.
+                Clicking <strong>&quot;{t("Open Device Dialler (112)")}&quot;</strong> will open your phone or device keypad with the emergency number <strong>112</strong> pre-filled.
               </p>
 
               <div
@@ -1065,7 +1065,7 @@ function PatientDashboard({ onLogout }) {
                 >
                   <CheckCircle2 size={18} />
                   <span>
-                    Device dialler opened with 112. Please complete the call on your device.
+                    {t("Device dialler opened with 112. Please complete the call on your device.")}
                   </span>
                 </div>
               )}
@@ -1080,7 +1080,7 @@ function PatientDashboard({ onLogout }) {
                   setDiallerOpened(false);
                 }}
               >
-                Cancel
+                {t("Cancel")}
               </button>
 
               <button
@@ -1092,7 +1092,7 @@ function PatientDashboard({ onLogout }) {
                 }}
               >
                 <PhoneCall size={18} />
-                Open Device Dialler (112)
+                {t("Open Device Dialler (112)")}
               </button>
             </div>
           </div>

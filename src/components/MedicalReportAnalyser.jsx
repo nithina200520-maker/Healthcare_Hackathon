@@ -19,8 +19,10 @@ import {
   Check,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useLanguage } from "../context/LanguageContext";
 
 export default function MedicalReportAnalyser() {
+  const { t, language } = useLanguage();
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -218,6 +220,7 @@ export default function MedicalReportAnalyser() {
             storagePath: storagePath,
             mimeType: selectedFile.type,
             fileBase64: base64Data,
+            language: language,
           },
         }
       );
@@ -307,15 +310,15 @@ export default function MedicalReportAnalyser() {
   const getStatusBadge = (status) => {
     switch (status) {
       case "High":
-        return { label: "High", bg: "#fee4e2", color: "#b42318" };
+        return { label: t("High"), bg: "#fee4e2", color: "#b42318" };
       case "Low":
-        return { label: "Low", bg: "#fef3eb", color: "#b7791f" };
+        return { label: t("Low"), bg: "#fef3eb", color: "#b7791f" };
       case "Attention":
-        return { label: "Attention", bg: "#fff1f0", color: "#cf1322" };
+        return { label: t("Attention"), bg: "#fff1f0", color: "#cf1322" };
       case "Normal":
-        return { label: "Normal", bg: "#e8f3ed", color: "#167044" };
+        return { label: t("Normal"), bg: "#e8f3ed", color: "#167044" };
       default:
-        return { label: status || "Observed", bg: "#f1f5f9", color: "#475569" };
+        return { label: status ? t(status) : t("Observed"), bg: "#f1f5f9", color: "#475569" };
     }
   };
 
@@ -324,11 +327,10 @@ export default function MedicalReportAnalyser() {
       <div className="panel-heading">
         <div>
           <h2>
-            <Sparkles size={22} style={{ color: "#087f68" }} /> AI Medical Report Analyser
+            <Sparkles size={22} style={{ color: "#087f68" }} /> {t("AI Medical Report Analyser")}
           </h2>
           <p>
-            Photograph or upload your laboratory reports, ECG tracings, or X-rays to receive an AI-powered,
-            patient-friendly explanation.
+            {t("Upload or photograph your medical documents for an intelligent, patient-friendly breakdown.")}
           </p>
         </div>
       </div>
@@ -418,7 +420,7 @@ export default function MedicalReportAnalyser() {
               style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 20px" }}
             >
               <Camera size={18} />
-              Take Photo
+              {t("Take Photo")}
             </button>
 
             <button
@@ -436,7 +438,7 @@ export default function MedicalReportAnalyser() {
               }}
             >
               <Upload size={18} />
-              Choose File / PDF
+              {t("Upload File")}
             </button>
           </div>
         </div>
@@ -493,7 +495,7 @@ export default function MedicalReportAnalyser() {
                 onClick={() => fileInputRef.current?.click()}
                 style={{ fontSize: 13 }}
               >
-                Replace
+                {t("Replace")}
               </button>
 
               <button
@@ -502,7 +504,7 @@ export default function MedicalReportAnalyser() {
                 onClick={handleRemoveFile}
                 style={{ fontSize: 13, color: "#b42318" }}
               >
-                <X size={15} /> Remove
+                <X size={15} /> {t("Remove")}
               </button>
             </div>
           </div>
@@ -544,7 +546,7 @@ export default function MedicalReportAnalyser() {
             }}
           >
             <Sparkles size={18} />
-            Analyse Report with AI
+            {t("Analyse Report")}
           </button>
         </div>
       )}
@@ -713,7 +715,7 @@ export default function MedicalReportAnalyser() {
                 marginBottom: 8,
               }}
             >
-              1 & 2. Report Overview & Summary
+              {t("1 & 2. Report Overview & Summary")}
             </h4>
             <div
               style={{
@@ -742,7 +744,7 @@ export default function MedicalReportAnalyser() {
                   marginBottom: 8,
                 }}
               >
-                3. Extracted Values & Observations
+                {t("3. Extracted Values & Observations")}
               </h4>
 
               <div style={{ overflowX: "auto" }}>
@@ -758,10 +760,10 @@ export default function MedicalReportAnalyser() {
                 >
                   <thead>
                     <tr style={{ background: "#f1f5f3", textAlign: "left" }}>
-                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>Parameter / Test</th>
-                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>Observed Result</th>
-                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>Reference Range</th>
-                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>Status</th>
+                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>{t("Parameter / Test")}</th>
+                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>{t("Result Value")}</th>
+                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>{t("Normal Range")}</th>
+                      <th style={{ padding: "10px 14px", borderBottom: "1px solid #d5dfda" }}>{t("Status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -810,7 +812,7 @@ export default function MedicalReportAnalyser() {
                 marginBottom: 8,
               }}
             >
-              4. Explanation in Plain Language
+              {t("4. Explanation in Plain Language")}
             </h4>
             <div
               style={{
@@ -842,7 +844,7 @@ export default function MedicalReportAnalyser() {
                   gap: 6,
                 }}
               >
-                <AlertTriangle size={16} /> 5. Findings That May Need Medical Attention
+                <AlertTriangle size={16} /> {t("5. Values or Findings Needing Attention")}
               </h4>
 
               <div
@@ -879,7 +881,7 @@ export default function MedicalReportAnalyser() {
                   gap: 6,
                 }}
               >
-                <HelpCircle size={16} /> 6. Questions to Ask Your Doctor
+                <HelpCircle size={16} /> {t("6. Questions You Can Ask Your Doctor")}
               </h4>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -904,7 +906,7 @@ export default function MedicalReportAnalyser() {
                       className="small-action"
                       onClick={() => copyQuestionToClipboard(question, idx)}
                       style={{ padding: "4px 8px", fontSize: 12 }}
-                      title="Copy question"
+                      title={t("Copy Question")}
                     >
                       {copiedIndex === idx ? <Check size={14} color="#167044" /> : <Copy size={14} />}
                     </button>
@@ -926,7 +928,7 @@ export default function MedicalReportAnalyser() {
               color: "#64746f",
             }}
           >
-            <strong>7. AI Limitations & Clinical Disclaimer:</strong>{" "}
+            <strong>{t("7. Medical Limitations & Safety Disclaimer")}:</strong>{" "}
             {currentAnalysis.disclaimer ||
               "This analysis is AI-generated for educational guidance only. It does not replace professional clinical evaluation, diagnosis, or treatment. Always discuss these findings with your qualified physician."}
           </div>
@@ -955,7 +957,7 @@ export default function MedicalReportAnalyser() {
         >
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Clock size={17} />
-            Previous Medical Reports ({history.length})
+            {t("Past Reports & History")} ({history.length})
           </span>
           {showHistory ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
@@ -963,9 +965,9 @@ export default function MedicalReportAnalyser() {
         {showHistory && (
           <div style={{ marginTop: 14 }}>
             {historyLoading ? (
-              <p style={{ color: "#64746f", fontSize: 14 }}>Loading previous reports...</p>
+              <p style={{ color: "#64746f", fontSize: 14 }}>{t("Loading...")}</p>
             ) : history.length === 0 ? (
-              <p style={{ color: "#64746f", fontSize: 14 }}>No previously analyzed reports found.</p>
+              <p style={{ color: "#64746f", fontSize: 14 }}>{t("No reports analyzed yet.")}</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {history.map((report) => (
@@ -1000,7 +1002,7 @@ export default function MedicalReportAnalyser() {
                           onClick={() => handleViewHistoricalAnalysis(report)}
                           style={{ fontSize: 12, padding: "5px 12px" }}
                         >
-                          View Analysis
+                          {t("View Analysis")}
                         </button>
                       )}
 
@@ -1010,7 +1012,7 @@ export default function MedicalReportAnalyser() {
                         disabled={deletingId === report.id}
                         onClick={() => handleDeleteReport(report)}
                         style={{ fontSize: 12, color: "#b42318", padding: "5px 10px" }}
-                        title="Delete report from storage"
+                        title={t("Delete report from storage")}
                       >
                         <Trash2 size={14} />
                       </button>
