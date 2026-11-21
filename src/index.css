@@ -704,3 +704,15 @@ footer {
   background: #066b58;
 }
 
+.status-missed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #b42318;
+  background: #fff0f0;
+  padding: 7px 10px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+

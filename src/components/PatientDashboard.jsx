@@ -21,6 +21,7 @@ function formatTime(time) {
   const [hours, minutes] = time.split(":");
   const hour = Number(hours);
   const period = hour >= 12 ? "PM" : "AM";
+
   return `${hour % 12 || 12}:${minutes} ${period}`;
 }
 
@@ -60,6 +61,7 @@ function getScheduledDateTime(time) {
 
 function PatientDashboard({ onLogout }) {
   const [medicines, setMedicines] = useState([]);
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMedicineName, setNewMedicineName] = useState("");
   const [newMedicineTime, setNewMedicineTime] = useState("08:00");
@@ -69,7 +71,25 @@ function PatientDashboard({ onLogout }) {
   const [actionId, setActionId] = useState(null);
   const [error, setError] = useState("");
 
-  // Fetch medicines and today's dose history
+  const takenCount = medicines.filter(
+    (medicine) => medicine.status === "Taken"
+  ).length;
+
+  const skippedCount = medicines.filter(
+    (medicine) => medicine.status === "Skipped"
+  ).length;
+
+  const missedCount = medicines.filter(
+    (medicine) => medicine.status === "Missed"
+  ).length;
+
+  const pendingCount = medicines.filter(
+    (medicine) =>
+      medicine.status === "Pending" ||
+      medicine.status === "Upcoming"
+  ).length;
+
+  // Load medicines and today's dose logs
   useEffect(() => {
     async function loadMedicines() {
       setLoading(true);
@@ -96,27 +116,101 @@ function PatientDashboard({ onLogout }) {
 
         const { start, end } = getTodayRange();
 
-        const { data: logData, error: logError } =
-          await supabase
+        const fetchLogs = async () => {
+          const { data, error } = await supabase
             .from("dose_logs")
-            .select("medicine_id, status")
+            .select("medicine_id, scheduled_for, status")
             .eq("patient_id", user.id)
             .gte("scheduled_for", start)
             .lt("scheduled_for", end);
 
-        if (logError) throw logError;
+          if (error) throw error;
 
+          return data || [];
+        };
+
+        let logData = await fetchLogs();
+
+        const now = Date.now();
+        const missedLogs = [];
+
+        // Find doses that passed their 30-minute grace period
+        for (const medicine of medicineData || []) {
+          const scheduledFor = getScheduledDateTime(
+            medicine.scheduled_time.slice(0, 5)
+          );
+
+          const scheduledTimestamp =
+            new Date(scheduledFor).getTime();
+
+          const alreadyLogged = logData.some(
+            (log) =>
+              log.medicine_id === medicine.id &&
+              new Date(log.scheduled_for).getTime() ===
+                scheduledTimestamp
+          );
+
+          const gracePeriodPassed =
+            now >= scheduledTimestamp + 30 * 60 * 1000;
+
+          if (!alreadyLogged && gracePeriodPassed) {
+            missedLogs.push({
+              patient_id: user.id,
+              medicine_id: medicine.id,
+              scheduled_for: scheduledFor,
+              status: "Missed",
+            });
+          }
+        }
+
+        // Save missed doses without creating duplicates
+        if (missedLogs.length > 0) {
+          const { error: insertError } = await supabase
+            .from("dose_logs")
+            .upsert(missedLogs, {
+              onConflict:
+                "patient_id,medicine_id,scheduled_for",
+              ignoreDuplicates: true,
+            });
+
+          if (insertError) throw insertError;
+
+          logData = await fetchLogs();
+        }
+
+        // Prepare dashboard data
         const updatedMedicines = (medicineData || []).map(
           (medicine) => {
-            const log = (logData || []).find(
-              (item) => item.medicine_id === medicine.id
+            const scheduledFor = getScheduledDateTime(
+              medicine.scheduled_time.slice(0, 5)
             );
+
+            const scheduledTimestamp =
+              new Date(scheduledFor).getTime();
+
+            const log = logData.find(
+              (item) =>
+                item.medicine_id === medicine.id &&
+                new Date(item.scheduled_for).getTime() ===
+                  scheduledTimestamp
+            );
+
+            let status = "Upcoming";
+
+            if (log) {
+              status = log.status;
+            } else if (scheduledTimestamp <= now) {
+              status =
+                now >= scheduledTimestamp + 30 * 60 * 1000
+                  ? "Missed"
+                  : "Pending";
+            }
 
             return {
               id: medicine.id,
               name: medicine.name,
               time: medicine.scheduled_time.slice(0, 5),
-              status: log ? log.status : "Upcoming",
+              status,
             };
           }
         );
@@ -132,21 +226,7 @@ function PatientDashboard({ onLogout }) {
     loadMedicines();
   }, []);
 
-  const takenCount = medicines.filter(
-    (medicine) => medicine.status === "Taken"
-  ).length;
-
-  const skippedCount = medicines.filter(
-    (medicine) => medicine.status === "Skipped"
-  ).length;
-
-  const pendingCount = medicines.filter(
-    (medicine) =>
-      medicine.status !== "Taken" &&
-      medicine.status !== "Skipped"
-  ).length;
-
-  // Add medicine to Supabase
+  // Add a new medicine
   const addMedicine = async (event) => {
     event.preventDefault();
 
@@ -200,7 +280,7 @@ function PatientDashboard({ onLogout }) {
     }
   };
 
-  // Record Taken or Skipped in dose_logs
+  // Update a dose status
   const updateDoseStatus = async (medicine, status) => {
     if (
       medicine.status === "Taken" ||
@@ -226,15 +306,19 @@ function PatientDashboard({ onLogout }) {
         medicine_id: medicine.id,
         scheduled_for: getScheduledDateTime(medicine.time),
         status,
+        taken_at:
+          status === "Taken"
+            ? new Date().toISOString()
+            : null,
       };
 
-      if (status === "Taken") {
-        log.taken_at = new Date().toISOString();
-      }
-
+      // Update an existing Missed record or insert a new one
       const { error: logError } = await supabase
         .from("dose_logs")
-        .insert(log);
+        .upsert(log, {
+          onConflict:
+            "patient_id,medicine_id,scheduled_for",
+        });
 
       if (logError) throw logError;
 
@@ -271,7 +355,9 @@ function PatientDashboard({ onLogout }) {
       <main className="dashboard-content">
         <section className="dashboard-welcome">
           <div>
-            <p className="dashboard-eyebrow">PATIENT DASHBOARD</p>
+            <p className="dashboard-eyebrow">
+              PATIENT DASHBOARD
+            </p>
             <h1>Good day!</h1>
             <p>Here's your health overview for today.</p>
           </div>
@@ -311,6 +397,23 @@ function PatientDashboard({ onLogout }) {
           </article>
         </section>
 
+        {missedCount > 0 && (
+          <div className="status-missed">
+            <AlertCircle size={18} />
+            {missedCount} dose(s) have passed their 30-minute
+            grace period.
+          </div>
+        )}
+
+        {error && (
+          <p
+            role="alert"
+            style={{ color: "#b42318", padding: "10px" }}
+          >
+            {error}
+          </p>
+        )}
+
         <section className="dashboard-panel">
           <div className="panel-heading">
             <div>
@@ -331,17 +434,17 @@ function PatientDashboard({ onLogout }) {
             </button>
           </div>
 
-          {error && (
-            <p style={{ color: "#b42318", padding: "10px" }}>
-              {error}
-            </p>
-          )}
-
           {showAddForm && (
-            <form className="add-medicine-form" onSubmit={addMedicine}>
+            <form
+              className="add-medicine-form"
+              onSubmit={addMedicine}
+            >
               <h3>Add a medicine</h3>
 
-              <label htmlFor="medicine-name">Medicine name</label>
+              <label htmlFor="medicine-name">
+                Medicine name
+              </label>
+
               <input
                 id="medicine-name"
                 type="text"
@@ -354,7 +457,10 @@ function PatientDashboard({ onLogout }) {
                 maxLength={80}
               />
 
-              <label htmlFor="medicine-time">Scheduled time</label>
+              <label htmlFor="medicine-time">
+                Scheduled time
+              </label>
+
               <input
                 id="medicine-time"
                 type="time"
@@ -380,10 +486,16 @@ function PatientDashboard({ onLogout }) {
             {loading ? (
               <p>Loading your medicines...</p>
             ) : medicines.length === 0 ? (
-              <p>No medicines added yet. Click Add to create your schedule.</p>
+              <p>
+                No medicines added yet. Click Add to create
+                your schedule.
+              </p>
             ) : (
               medicines.map((medicine) => (
-                <article className="medicine-item" key={medicine.id}>
+                <article
+                  className="medicine-item"
+                  key={medicine.id}
+                >
                   <div className="medicine-icon">
                     <Pill size={21} />
                   </div>
@@ -399,15 +511,26 @@ function PatientDashboard({ onLogout }) {
                   <div className="medicine-action">
                     {medicine.status === "Taken" ? (
                       <span className="status-taken">
-                        <CheckCircle2 size={15} /> Taken
+                        <CheckCircle2 size={15} />
+                        Taken
                       </span>
                     ) : medicine.status === "Skipped" ? (
                       <span className="status-skipped">
-                        <XCircle size={15} /> Skipped
+                        <XCircle size={15} />
+                        Skipped
                       </span>
                     ) : (
                       <>
-                        <span className="status-pending">
+                        <span
+                          className={
+                            medicine.status === "Missed"
+                              ? "status-missed"
+                              : "status-pending"
+                          }
+                        >
+                          {medicine.status === "Missed" && (
+                            <AlertCircle size={15} />
+                          )}
                           {medicine.status}
                         </span>
 
@@ -467,8 +590,9 @@ function PatientDashboard({ onLogout }) {
         </section>
 
         <p className="dashboard-disclaimer">
-          CareBridge provides health-management support, not medical diagnosis.
-          Follow your healthcare professional's instructions.
+          CareBridge provides health-management support, not
+          medical diagnosis. Follow your healthcare
+          professional's instructions.
         </p>
       </main>
     </div>
