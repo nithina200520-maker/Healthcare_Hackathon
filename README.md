@@ -14,7 +14,8 @@ CareBridge supports six public roles and one private administrative role:
 * **Weekly Adherence Analytics**: Interactive 7-day adherence charts displaying daily percentages and total adherence metrics.
 * **Caregiver Connection**: Generate and share account IDs to invite caregivers into the care circle.
 * **Doctor Communication**: Send non-emergency health questions and clinical concerns directly to assigned doctors.
-* **Emergency Assistance**: One-click quick action to contact doctors, report concerns, or initiate emergency calls (112).
+* **Emergency SOS (112)**: Prominent red emergency button in navbar, high-priority emergency banner, and quick actions. Opens an emergency confirmation dialog and invokes the native device dialler (`tel:112`) without requiring internet connectivity.
+* **AI Medical Report Analyser**: Multimodal AI tool allowing patients to take camera photos or upload medical reports (ECGs, X-rays, blood tests, lab reports in JPG, PNG, PDF <= 10MB), view previews, securely store them in private storage, and receive an AI-powered 7-section plain-language analysis with clinical disclaimers.
 
 ### 2. Caregiver
 * **Patient Link Management**: Accept or reject patient connection requests.
@@ -125,30 +126,59 @@ npm run lint
 * `public.hospital_patient_links` (`id`, `hospital_id`, `patient_id`, `is_active`, `created_at`)
 * `public.volunteer_tasks` (`id`, `volunteer_id`, `patient_id`, `task_description`, `status`, `created_at`, `updated_at`)
 * `public.admin_activity_logs` (`id`, `admin_id`, `action`, `target_user_id`, `target_role`, `details`, `created_at`)
+* `public.medical_reports` (`id`, `patient_id`, `file_name`, `file_path`, `file_size`, `mime_type`, `report_type`, `status`, `analysis`, `created_at`, `updated_at`)
+* Storage Bucket: `medical-reports` (Private, 10MB limit, RLS scoped to `auth.uid() = patient_id`)
 
 ### Applying Database Migrations
 Migrations are located in `carebridge/supabase/migrations/`:
 * `20261122_audit_logging_and_volunteer_task.sql`: Updates `admin_create_volunteer_task` with audit logging and adds `admin_get_activity_logs` RPC.
+* `20261122_medical_reports_and_storage.sql`: Creates `public.medical_reports` table, enables RLS policies, provisions private `medical-reports` storage bucket, and configures storage object RLS policies.
 
 To apply via the Supabase Dashboard:
 1. Open the Supabase Project Dashboard.
 2. Navigate to the **SQL Editor**.
-3. Open `supabase/migrations/20261122_audit_logging_and_volunteer_task.sql` and click **Run**.
+3. Open `supabase/migrations/20261122_medical_reports_and_storage.sql` and click **Run**.
 
 ---
 
 ## ⚡ Supabase Edge Functions
 
-### `admin-manage-user`
+### 1. `admin-manage-user`
 The `admin-manage-user` function handles account suspension and reactivation using the Supabase Auth Admin API (`updateUserById`).
 * **Source**: `supabase/functions/admin-manage-user/index.ts`
 * **Features**:
   * Authenticates caller with their user session token.
   * Verifies caller exists in `public.authorized_admins`.
-  * Prevents admins from suspending their own accounts.
-  * Prevents admins from modifying other authorized admin accounts.
+  * Prevents admins from suspending their own accounts or other authorized admins.
   * Sets ban duration to `876000h` (suspend) or `none` (reactivate).
   * Automatically records audit entries (`ACCOUNT_SUSPENDED`, `ACCOUNT_REACTIVATED`) into `public.admin_activity_logs`.
+
+### 2. `analyze-medical-report`
+The `analyze-medical-report` function uses vision AI to analyze uploaded medical documents (ECGs, X-rays, blood reports, lab summaries).
+* **Source**: `supabase/functions/analyze-medical-report/index.ts`
+* **Features**:
+  * Authenticates the caller and verifies ownership in `public.medical_reports`.
+  * Fetches file from private Supabase Storage (`medical-reports`) or uses direct payload transmission.
+  * Calls **Google Gemini 2.0 Flash** (`gemini-2.0-flash`) with fallback to **OpenAI GPT-4o-mini** (`gpt-4o-mini`).
+  * Enforces medical safety rules: informational only, never prescribes or diagnoses, flags unreadable documents.
+  * Returns structured JSON across 7 clinical sections:
+    1. Report Type
+    2. Summary of the Report
+    3. Extracted Values and Observations (with abnormal flags)
+    4. Simple Language Explanation
+    5. Findings Needing Attention
+    6. Doctor Discussion Questions
+    7. Medical Disclaimers & Limitations
+  * Persists analysis and detected report type into `public.medical_reports`.
+
+### Configuring Edge Function Secrets
+In your Supabase Dashboard:
+1. Go to **Project Settings** &rarr; **Edge Functions** &rarr; **Secrets**.
+2. Add the following secrets:
+   * `GEMINI_API_KEY`: Your Google Gemini API Key (recommended for multimodal image and PDF analysis)
+   * `OPENAI_API_KEY`: *(Optional fallback)* Your OpenAI API Key
+   * `SUPABASE_URL`: Pre-configured in hosted projects
+   * `SUPABASE_SERVICE_ROLE_KEY`: Pre-configured in hosted projects
 
 ### Edge Function Deployment
 ```bash

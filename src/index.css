@@ -716,3 +716,237 @@ footer {
   font-weight: 600;
 }
 
+/* ==========================================================================
+   Emergency SOS Components
+   ========================================================================== */
+
+.emergency-sos-top-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #d92d20;
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(217, 45, 32, 0.35);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.emergency-sos-top-btn:hover {
+  background: #b42318;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(217, 45, 32, 0.45);
+}
+
+.emergency-sos-top-btn:active {
+  transform: translateY(0);
+}
+
+.sos-pulse-ring {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: sos-pulse 1.6s infinite;
+}
+
+@keyframes sos-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.85);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(255, 255, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+
+.emergency-sos-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-left: 5px solid #d92d20;
+  padding: 14px 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.emergency-sos-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #7a271a;
+  flex: 1;
+  min-width: 250px;
+}
+
+.emergency-sos-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #d92d20;
+  color: #ffffff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.emergency-sos-banner-btn:hover {
+  background: #b42318;
+  transform: translateY(-1px);
+}
+
+.quick-action-sos:hover {
+  background: #fee4e2 !important;
+  border-color: #f04438 !important;
+}
+
+/* Modal Dialog */
+.emergency-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.emergency-modal-content {
+  background: #ffffff;
+  border-radius: 16px;
+  max-width: 520px;
+  width: 100%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  border: 2px solid #fecdca;
+  animation: modal-pop 0.2s ease-out;
+}
+
+@keyframes modal-pop {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.emergency-modal-header {
+  background: #fef3f2;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid #fee4e2;
+}
+
+.emergency-modal-header-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fee4e2;
+  color: #d92d20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.emergency-modal-header h3 {
+  margin: 0;
+  color: #b42318;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.emergency-modal-body {
+  padding: 24px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.emergency-modal-footer {
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.emergency-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #d92d20;
+  color: white;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 11px 22px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.emergency-confirm-btn:hover {
+  background: #b42318;
+}
+
+.emergency-cancel-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-weight: 600;
+  padding: 11px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.emergency-cancel-btn:hover {
+  background: #f1f5f9;
+}
+
+@media (max-width: 640px) {
+  .emergency-sos-top-btn span:last-child {
+    display: none;
+  }
+  .emergency-sos-top-btn {
+    padding: 8px 10px;
+  }
+  .emergency-modal-footer {
+    flex-direction: column-reverse;
+  }
+  .emergency-confirm-btn,
+  .emergency-cancel-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+

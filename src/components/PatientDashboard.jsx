@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import MedicalReportAnalyser from "./MedicalReportAnalyser";
 
 import {
   HeartPulse,
@@ -8,9 +9,11 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  AlertTriangle,
   CalendarDays,
   MessageCircle,
   Phone,
+  PhoneCall,
   Plus,
   LogOut,
   XCircle,
@@ -94,6 +97,9 @@ function PatientDashboard({ onLogout }) {
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState(null);
   const [error, setError] = useState("");
+
+  const [showSosModal, setShowSosModal] = useState(false);
+  const [diallerOpened, setDiallerOpened] = useState(false);
 
   const takenCount = medicines.filter(
     (medicine) => medicine.status === "Taken"
@@ -495,13 +501,55 @@ function PatientDashboard({ onLogout }) {
           <span>CareBridge</span>
         </div>
 
-        <button className="logout-button" onClick={onLogout}>
-          <LogOut size={17} />
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            type="button"
+            className="emergency-sos-top-btn"
+            onClick={() => {
+              setDiallerOpened(false);
+              setShowSosModal(true);
+            }}
+            aria-label="Emergency SOS - Call 112"
+          >
+            <span className="sos-pulse-ring" />
+            <PhoneCall size={16} />
+            <span>EMERGENCY SOS (112)</span>
+          </button>
+
+          <button className="logout-button" onClick={onLogout}>
+            <LogOut size={17} />
+            Logout
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-content">
+        {/* Emergency SOS Quick Alert Banner */}
+        <div className="emergency-sos-banner" role="region" aria-label="Emergency Help Banner">
+          <div className="emergency-sos-banner-text">
+            <AlertTriangle size={24} style={{ color: "#d92d20", flexShrink: 0 }} />
+            <div>
+              <strong style={{ display: "block", color: "#912018", fontSize: "14px" }}>
+                Emergency Medical Assistance Available (Dial 112)
+              </strong>
+              <span style={{ fontSize: "13px", color: "#7a271a" }}>
+                In a critical or life-threatening situation, connect directly with national emergency responders.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="emergency-sos-banner-btn"
+            onClick={() => {
+              setDiallerOpened(false);
+              setShowSosModal(true);
+            }}
+          >
+            <PhoneCall size={16} />
+            Call Emergency (112)
+          </button>
+        </div>
+
         <section className="dashboard-welcome">
           <div>
             <p className="dashboard-eyebrow">
@@ -882,6 +930,9 @@ function PatientDashboard({ onLogout }) {
           </div>
         </section>
 
+        {/* Feature 2: AI Medical Report Analyser */}
+        <MedicalReportAnalyser />
+
         <section className="dashboard-quick-actions">
           <h2>Quick actions</h2>
 
@@ -920,14 +971,18 @@ function PatientDashboard({ onLogout }) {
 
             <button
               type="button"
+              className="quick-action-sos"
               onClick={() => {
-                if (window.confirm("Do you want to dial emergency services (112)?")) {
-                  window.open("tel:112", "_self");
-                }
+                setDiallerOpened(false);
+                setShowSosModal(true);
+              }}
+              style={{
+                borderColor: "#fecdca",
+                background: "#fef3f2",
               }}
             >
-              <Phone size={22} />
-              <span>Emergency call (112)</span>
+              <Phone size={22} style={{ color: "#d92d20" }} />
+              <span style={{ color: "#b42318", fontWeight: 700 }}>Emergency SOS (112)</span>
             </button>
           </div>
         </section>
@@ -938,6 +993,111 @@ function PatientDashboard({ onLogout }) {
           professional's instructions.
         </p>
       </main>
+
+      {/* Feature 1: Emergency SOS Confirmation Modal */}
+      {showSosModal && (
+        <div
+          className="emergency-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sos-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowSosModal(false);
+              setDiallerOpened(false);
+            }
+          }}
+        >
+          <div className="emergency-modal-content">
+            <div className="emergency-modal-header">
+              <div className="emergency-modal-header-icon">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 id="sos-modal-title">EMERGENCY SOS: 112</h3>
+                <span style={{ fontSize: 13, color: "#7a271a" }}>
+                  National Emergency Services Hotline
+                </span>
+              </div>
+            </div>
+
+            <div className="emergency-modal-body">
+              <p style={{ margin: "0 0 12px", fontWeight: 600, fontSize: 15, color: "#1e293b" }}>
+                Are you experiencing a medical emergency?
+              </p>
+              <p style={{ margin: "0 0 12px", fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
+                Clicking <strong>&quot;Open Device Dialler (112)&quot;</strong> will open your phone or device keypad with the emergency number <strong>112</strong> pre-filled.
+              </p>
+
+              <div
+                style={{
+                  background: "#fef3f2",
+                  borderLeft: "4px solid #d92d20",
+                  padding: "12px 14px",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  color: "#7a271a",
+                  lineHeight: 1.5,
+                  marginBottom: 16,
+                }}
+              >
+                <strong>Important:</strong> CareBridge initiates the connection, but you must tap <strong>Call</strong> on your device&apos;s dialler to complete the call. CareBridge does not record or simulate calls.
+              </div>
+
+              <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+                ℹ️ The emergency dialler operates natively (<code>tel:112</code>) and does not require an active internet connection.
+              </p>
+
+              {diallerOpened && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: "12px 14px",
+                    background: "#ecfdf3",
+                    border: "1px solid #a6f4c5",
+                    borderRadius: 8,
+                    color: "#05603a",
+                    fontSize: 13,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <CheckCircle2 size={18} />
+                  <span>
+                    Device dialler opened with 112. Please complete the call on your device.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="emergency-modal-footer">
+              <button
+                type="button"
+                className="emergency-cancel-btn"
+                onClick={() => {
+                  setShowSosModal(false);
+                  setDiallerOpened(false);
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="emergency-confirm-btn"
+                onClick={() => {
+                  window.location.href = "tel:112";
+                  setDiallerOpened(true);
+                }}
+              >
+                <PhoneCall size={18} />
+                Open Device Dialler (112)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
