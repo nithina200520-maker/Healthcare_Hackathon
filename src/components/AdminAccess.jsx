@@ -18,24 +18,19 @@ import {
   HandHeart,
   Ban,
   RotateCcw,
+  Activity,
+  UserCheck,
+  TrendingUp,
+  ListChecks,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 const ROLES = ["Doctor", "Nurse", "Hospital", "Volunteer"];
 
 const TABLES = {
-  Doctor: {
-    table: "doctor_patient_links",
-    professionalColumn: "doctor_id",
-  },
-  Nurse: {
-    table: "nurse_patient_links",
-    professionalColumn: "nurse_id",
-  },
-  Hospital: {
-    table: "hospital_patient_links",
-    professionalColumn: "hospital_id",
-  },
+  Doctor: { table: "doctor_patient_links" },
+  Nurse: { table: "nurse_patient_links" },
+  Hospital: { table: "hospital_patient_links" },
 };
 
 export default function AdminAccess({ onLogout }) {
@@ -48,6 +43,9 @@ export default function AdminAccess({ onLogout }) {
   const [filter, setFilter] = useState("Pending");
 
   const [users, setUsers] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   const [assignments, setAssignments] = useState({
     Doctor: [],
     Nurse: [],
@@ -62,6 +60,24 @@ export default function AdminAccess({ onLogout }) {
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [assignmentProcessingId, setAssignmentProcessingId] = useState(null);
 
+  // LOAD ANALYTICS
+  const loadAnalytics = async () => {
+    setAnalyticsLoading(true);
+
+    try {
+      const { data, error } = await supabase.rpc("admin_get_analytics");
+
+      if (error) throw error;
+
+      setAnalytics(data);
+    } catch (err) {
+      setError(err.message || "Unable to load analytics.");
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  // LOAD ASSIGNMENTS
   const loadAssignments = async () => {
     const results = {
       Doctor: [],
@@ -71,10 +87,8 @@ export default function AdminAccess({ onLogout }) {
     };
 
     for (const role of ["Doctor", "Nurse", "Hospital"]) {
-      const config = TABLES[role];
-
       const { data, error } = await supabase
-        .from(config.table)
+        .from(TABLES[role].table)
         .select("*")
         .order("created_at", { ascending: false });
 
@@ -94,6 +108,7 @@ export default function AdminAccess({ onLogout }) {
     setAssignments(results);
   };
 
+  // LOAD ADMIN DASHBOARD
   const loadDashboard = async () => {
     setLoading(true);
     setError("");
@@ -137,7 +152,10 @@ export default function AdminAccess({ onLogout }) {
       if (userError2) throw userError2;
       setUsers(userData || []);
 
-      await loadAssignments();
+      await Promise.all([
+        loadAssignments(),
+        loadAnalytics(),
+      ]);
     } catch (err) {
       setError(err.message || "Unable to load Admin Dashboard.");
     } finally {
@@ -149,14 +167,13 @@ export default function AdminAccess({ onLogout }) {
     loadDashboard();
   }, []);
 
+  // ACCOUNT APPROVAL
   const reviewRequest = async (userId, decision) => {
     if (
       !window.confirm(
         `Are you sure you want to ${decision.toLowerCase()} this account?`
       )
-    ) {
-      return;
-    }
+    ) return;
 
     setProcessingId(userId);
     setError("");
@@ -179,6 +196,7 @@ export default function AdminAccess({ onLogout }) {
     }
   };
 
+  // CREATE ASSIGNMENT
   const createAssignment = async (event) => {
     event.preventDefault();
     setError("");
@@ -224,7 +242,7 @@ export default function AdminAccess({ onLogout }) {
       setPatientId("");
       setTaskDescription("");
 
-      await loadAssignments();
+      await Promise.all([loadAssignments(), loadAnalytics()]);
     } catch (err) {
       setError(err.message || "Unable to create assignment.");
     } finally {
@@ -232,7 +250,7 @@ export default function AdminAccess({ onLogout }) {
     }
   };
 
-  // Deactivate, reactivate or cancel an existing assignment/task.
+  // DEACTIVATE, REACTIVATE OR CANCEL
   const updateAssignment = async (role, assignmentId, action) => {
     const confirmation =
       action === "Deactivate"
@@ -262,7 +280,7 @@ export default function AdminAccess({ onLogout }) {
           : `${role} assignment ${action.toLowerCase()}d successfully.`
       );
 
-      await loadAssignments();
+      await Promise.all([loadAssignments(), loadAnalytics()]);
     } catch (err) {
       setError(err.message || "Unable to update assignment.");
     } finally {
@@ -270,6 +288,7 @@ export default function AdminAccess({ onLogout }) {
     }
   };
 
+  // COUNTS
   const pendingCount = requests.filter(
     (r) => r.status === "Pending"
   ).length;
@@ -298,15 +317,36 @@ export default function AdminAccess({ onLogout }) {
     return user?.full_name || id;
   };
 
+  // REFRESH
   const refreshAssignments = async () => {
     setError("");
+    setSuccess("");
+
     try {
-      await loadAssignments();
-      setSuccess("Assignment overview refreshed.");
+      await Promise.all([loadAssignments(), loadAnalytics()]);
+      setSuccess("Assignments and analytics refreshed.");
     } catch (err) {
-      setError(err.message || "Unable to refresh assignments.");
+      setError(err.message || "Unable to refresh dashboard.");
     }
   };
+
+  const refreshAnalytics = async () => {
+    setError("");
+    await loadAnalytics();
+    if (analytics) setSuccess("Analytics refreshed successfully.");
+  };
+
+  // ANALYTICS CARD
+  const MetricCard = ({ icon: Icon, label, value, description }) => (
+    <article className="stat-card">
+      <div className="stat-icon">
+        <Icon />
+      </div>
+      <p>{label}</p>
+      <h2>{value ?? 0}</h2>
+      <span>{description}</span>
+    </article>
+  );
 
   return (
     <div className="patient-dashboard">
@@ -330,7 +370,8 @@ export default function AdminAccess({ onLogout }) {
             <p className="dashboard-eyebrow">ADMINISTRATION</p>
             <h1>Welcome, {admin?.admin_name || "Administrator"}!</h1>
             <p>
-              Manage accounts, professional approvals and patient assignments.
+              Manage accounts, analytics, professional approvals and patient
+              assignments.
             </p>
           </div>
 
@@ -366,36 +407,197 @@ export default function AdminAccess({ onLogout }) {
           </section>
         ) : (
           <>
-            {/* ACCOUNT APPROVALS */}
-            <section className="dashboard-stats">
-              <article className="stat-card">
-                <div className="stat-icon">
-                  <Clock />
+            {/* ADMIN ANALYTICS */}
+            <section className="dashboard-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>
+                    <Activity size={21} /> Platform Analytics
+                  </h2>
+                  <p>Live overview of CareBridge activity.</p>
                 </div>
-                <p>Pending requests</p>
-                <h2>{pendingCount}</h2>
-                <span>Awaiting review</span>
-              </article>
 
-              <article className="stat-card">
-                <div className="stat-icon">
-                  <CheckCircle2 />
-                </div>
-                <p>Approved</p>
-                <h2>{approvedCount}</h2>
-                <span>Authorized accounts</span>
-              </article>
+                <button
+                  className="small-action"
+                  type="button"
+                  onClick={refreshAnalytics}
+                  disabled={analyticsLoading}
+                >
+                  <RefreshCw size={16} />
+                  {analyticsLoading ? "Loading..." : "Refresh Analytics"}
+                </button>
+              </div>
 
-              <article className="stat-card">
-                <div className="stat-icon">
-                  <XCircle />
-                </div>
-                <p>Rejected</p>
-                <h2>{rejectedCount}</h2>
-                <span>Declined requests</span>
-              </article>
+              {!analytics ? (
+                <p>
+                  {analyticsLoading
+                    ? "Loading analytics..."
+                    : "Analytics are currently unavailable. Try refreshing."}
+                </p>
+              ) : (
+                <>
+                  <h3 style={{ marginTop: 20 }}>
+                    <Users size={18} /> Registered Patients
+                  </h3>
+
+                  <section className="dashboard-stats">
+                    <MetricCard
+                      icon={UserRound}
+                      label="Patients"
+                      value={analytics.patients}
+                      description="Registered patient accounts"
+                    />
+                    <MetricCard
+                      icon={Stethoscope}
+                      label="Doctors"
+                      value={analytics.doctors}
+                      description="Approved doctors"
+                    />
+                    <MetricCard
+                      icon={HeartPulse}
+                      label="Nurses"
+                      value={analytics.nurses}
+                      description="Approved nurses"
+                    />
+                    <MetricCard
+                      icon={Hospital}
+                      label="Hospitals"
+                      value={analytics.hospitals}
+                      description="Approved hospitals"
+                    />
+                    <MetricCard
+                      icon={HandHeart}
+                      label="Volunteers"
+                      value={analytics.volunteers}
+                      description="Approved volunteers"
+                    />
+                  </section>
+
+                  <h3 style={{ marginTop: 24 }}>
+                    <UserCheck size={18} /> Account Requests
+                  </h3>
+
+                  <section className="dashboard-stats">
+                    <MetricCard
+                      icon={Clock}
+                      label="Pending"
+                      value={analytics.pending_requests}
+                      description="Awaiting review"
+                    />
+                    <MetricCard
+                      icon={CheckCircle2}
+                      label="Approved"
+                      value={analytics.approved_requests}
+                      description="Approved requests"
+                    />
+                    <MetricCard
+                      icon={XCircle}
+                      label="Rejected"
+                      value={analytics.rejected_requests}
+                      description="Rejected requests"
+                    />
+                  </section>
+
+                  <h3 style={{ marginTop: 24 }}>
+                    <ClipboardList size={18} /> Professional Assignments
+                  </h3>
+
+                  <section className="dashboard-stats">
+                    <MetricCard
+                      icon={Stethoscope}
+                      label="Doctor Active"
+                      value={analytics.doctor_active}
+                      description="Active doctor links"
+                    />
+                    <MetricCard
+                      icon={Activity}
+                      label="Doctor Inactive"
+                      value={analytics.doctor_inactive}
+                      description="Inactive doctor links"
+                    />
+                    <MetricCard
+                      icon={HeartPulse}
+                      label="Nurse Active"
+                      value={analytics.nurse_active}
+                      description="Active nurse links"
+                    />
+                    <MetricCard
+                      icon={Activity}
+                      label="Nurse Inactive"
+                      value={analytics.nurse_inactive}
+                      description="Inactive nurse links"
+                    />
+                    <MetricCard
+                      icon={Hospital}
+                      label="Hospital Active"
+                      value={analytics.hospital_active}
+                      description="Active hospital links"
+                    />
+                    <MetricCard
+                      icon={Activity}
+                      label="Hospital Inactive"
+                      value={analytics.hospital_inactive}
+                      description="Inactive hospital links"
+                    />
+                  </section>
+
+                  <h3 style={{ marginTop: 24 }}>
+                    <HandHeart size={18} /> Volunteer Task Statistics
+                  </h3>
+
+                  <section className="dashboard-stats">
+                    <MetricCard
+                      icon={Clock}
+                      label="Pending Tasks"
+                      value={analytics.volunteer_pending}
+                      description="Tasks waiting to start"
+                    />
+                    <MetricCard
+                      icon={TrendingUp}
+                      label="In Progress"
+                      value={analytics.volunteer_in_progress}
+                      description="Ongoing tasks"
+                    />
+                    <MetricCard
+                      icon={CheckCircle2}
+                      label="Completed"
+                      value={analytics.volunteer_completed}
+                      description="Completed tasks"
+                    />
+                    <MetricCard
+                      icon={XCircle}
+                      label="Cancelled"
+                      value={analytics.volunteer_cancelled}
+                      description="Cancelled tasks"
+                    />
+                  </section>
+                </>
+              )}
             </section>
 
+            {/* ACCOUNT REQUEST SUMMARY */}
+            <section className="dashboard-stats">
+              <MetricCard
+                icon={Clock}
+                label="Pending Requests"
+                value={pendingCount}
+                description="Awaiting review"
+              />
+              <MetricCard
+                icon={CheckCircle2}
+                label="Approved"
+                value={approvedCount}
+                description="Authorized accounts"
+              />
+              <MetricCard
+                icon={XCircle}
+                label="Rejected"
+                value={rejectedCount}
+                description="Declined requests"
+              />
+            </section>
+
+            {/* ACCOUNT APPROVALS */}
             <section className="dashboard-panel">
               <div className="panel-heading">
                 <div>
@@ -619,7 +821,7 @@ export default function AdminAccess({ onLogout }) {
               </form>
             </section>
 
-            {/* ASSIGNMENT OVERVIEW AND CONTROLS */}
+            {/* ASSIGNMENT OVERVIEW */}
             <section className="dashboard-panel">
               <div className="panel-heading">
                 <div>
@@ -693,7 +895,6 @@ export default function AdminAccess({ onLogout }) {
                             style={{ flex: 1 }}
                           >
                             <strong>{findName(professionalId)}</strong>
-
                             <p>Patient: {findName(item.patient_id)}</p>
 
                             {isVolunteer && (
@@ -702,19 +903,7 @@ export default function AdminAccess({ onLogout }) {
 
                             <p>
                               Status:{" "}
-                              <strong
-                                style={{
-                                  color: isVolunteer
-                                    ? isCancelled
-                                      ? "#b42318"
-                                      : item.status === "Completed"
-                                      ? "#167044"
-                                      : "#9a6700"
-                                    : isActive
-                                    ? "#167044"
-                                    : "#b42318",
-                                }}
-                              >
+                              <strong>
                                 {isVolunteer
                                   ? item.status
                                   : isActive
@@ -765,7 +954,6 @@ export default function AdminAccess({ onLogout }) {
                                   ) : (
                                     <RotateCcw size={16} />
                                   )}
-
                                   {isActive ? "Deactivate" : "Reactivate"}
                                 </button>
                               )}
