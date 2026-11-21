@@ -16,6 +16,8 @@ import {
   Hospital,
   Stethoscope,
   HandHeart,
+  Ban,
+  RotateCcw,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
@@ -58,56 +60,7 @@ export default function AdminAccess({ onLogout }) {
   const [patientId, setPatientId] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [assignmentLoading, setAssignmentLoading] = useState(false);
-
-  const loadDashboard = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) throw userError;
-      if (!user) throw new Error("Please log in again.");
-
-      const { data: adminData, error: adminError } = await supabase
-        .from("authorized_admins")
-        .select("admin_id, admin_name")
-        .eq("admin_id", user.id)
-        .maybeSingle();
-
-      if (adminError) throw adminError;
-      if (!adminData) {
-        setAdmin(null);
-        setRequests([]);
-        return;
-      }
-
-      setAdmin(adminData);
-
-      const { data: requestData, error: requestError } = await supabase
-        .from("account_requests")
-        .select("user_id, full_name, role, status, created_at")
-        .order("created_at", { ascending: false });
-
-      if (requestError) throw requestError;
-      setRequests(requestData || []);
-
-      const { data: userData, error: userError2 } =
-        await supabase.rpc("admin_list_assignment_users");
-
-      if (userError2) throw userError2;
-      setUsers(userData || []);
-
-      await loadAssignments();
-    } catch (err) {
-      setError(err.message || "Unable to load Admin Dashboard.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [assignmentProcessingId, setAssignmentProcessingId] = useState(null);
 
   const loadAssignments = async () => {
     const results = {
@@ -141,6 +94,57 @@ export default function AdminAccess({ onLogout }) {
     setAssignments(results);
   };
 
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("Please log in again.");
+
+      const { data: adminData, error: adminError } = await supabase
+        .from("authorized_admins")
+        .select("admin_id, admin_name")
+        .eq("admin_id", user.id)
+        .maybeSingle();
+
+      if (adminError) throw adminError;
+
+      if (!adminData) {
+        setAdmin(null);
+        setRequests([]);
+        return;
+      }
+
+      setAdmin(adminData);
+
+      const { data: requestData, error: requestError } = await supabase
+        .from("account_requests")
+        .select("user_id, full_name, role, status, created_at")
+        .order("created_at", { ascending: false });
+
+      if (requestError) throw requestError;
+      setRequests(requestData || []);
+
+      const { data: userData, error: userError2 } =
+        await supabase.rpc("admin_list_assignment_users");
+
+      if (userError2) throw userError2;
+      setUsers(userData || []);
+
+      await loadAssignments();
+    } catch (err) {
+      setError(err.message || "Unable to load Admin Dashboard.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadDashboard();
   }, []);
@@ -150,7 +154,9 @@ export default function AdminAccess({ onLogout }) {
       !window.confirm(
         `Are you sure you want to ${decision.toLowerCase()} this account?`
       )
-    ) return;
+    ) {
+      return;
+    }
 
     setProcessingId(userId);
     setError("");
@@ -167,7 +173,7 @@ export default function AdminAccess({ onLogout }) {
       setSuccess(`Account ${decision.toLowerCase()} successfully.`);
       await loadDashboard();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to review account.");
     } finally {
       setProcessingId(null);
     }
@@ -226,6 +232,44 @@ export default function AdminAccess({ onLogout }) {
     }
   };
 
+  // Deactivate, reactivate or cancel an existing assignment/task.
+  const updateAssignment = async (role, assignmentId, action) => {
+    const confirmation =
+      action === "Deactivate"
+        ? "Are you sure you want to deactivate this assignment?"
+        : action === "Reactivate"
+        ? "Are you sure you want to reactivate this assignment?"
+        : "Are you sure you want to cancel this volunteer task?";
+
+    if (!window.confirm(confirmation)) return;
+
+    setAssignmentProcessingId(assignmentId);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error } = await supabase.rpc("admin_update_assignment", {
+        p_role: role,
+        p_assignment_id: assignmentId,
+        p_action: action,
+      });
+
+      if (error) throw error;
+
+      setSuccess(
+        action === "Cancel"
+          ? "Volunteer task cancelled successfully."
+          : `${role} assignment ${action.toLowerCase()}d successfully.`
+      );
+
+      await loadAssignments();
+    } catch (err) {
+      setError(err.message || "Unable to update assignment.");
+    } finally {
+      setAssignmentProcessingId(null);
+    }
+  };
+
   const pendingCount = requests.filter(
     (r) => r.status === "Pending"
   ).length;
@@ -254,6 +298,16 @@ export default function AdminAccess({ onLogout }) {
     return user?.full_name || id;
   };
 
+  const refreshAssignments = async () => {
+    setError("");
+    try {
+      await loadAssignments();
+      setSuccess("Assignment overview refreshed.");
+    } catch (err) {
+      setError(err.message || "Unable to refresh assignments.");
+    }
+  };
+
   return (
     <div className="patient-dashboard">
       <header className="dashboard-navbar">
@@ -275,8 +329,11 @@ export default function AdminAccess({ onLogout }) {
           <div>
             <p className="dashboard-eyebrow">ADMINISTRATION</p>
             <h1>Welcome, {admin?.admin_name || "Administrator"}!</h1>
-            <p>Manage accounts, professional approvals and patient assignments.</p>
+            <p>
+              Manage accounts, professional approvals and patient assignments.
+            </p>
           </div>
+
           <div className="dashboard-profile-icon">
             <ShieldCheck size={30} />
           </div>
@@ -309,34 +366,42 @@ export default function AdminAccess({ onLogout }) {
           </section>
         ) : (
           <>
+            {/* ACCOUNT APPROVALS */}
             <section className="dashboard-stats">
               <article className="stat-card">
-                <div className="stat-icon"><Clock /></div>
+                <div className="stat-icon">
+                  <Clock />
+                </div>
                 <p>Pending requests</p>
                 <h2>{pendingCount}</h2>
                 <span>Awaiting review</span>
               </article>
 
               <article className="stat-card">
-                <div className="stat-icon"><CheckCircle2 /></div>
+                <div className="stat-icon">
+                  <CheckCircle2 />
+                </div>
                 <p>Approved</p>
                 <h2>{approvedCount}</h2>
                 <span>Authorized accounts</span>
               </article>
 
               <article className="stat-card">
-                <div className="stat-icon"><XCircle /></div>
+                <div className="stat-icon">
+                  <XCircle />
+                </div>
                 <p>Rejected</p>
                 <h2>{rejectedCount}</h2>
                 <span>Declined requests</span>
               </article>
             </section>
 
-            {/* ACCOUNT APPROVALS */}
             <section className="dashboard-panel">
               <div className="panel-heading">
                 <div>
-                  <h2><Users size={21} /> Account requests</h2>
+                  <h2>
+                    <Users size={21} /> Account requests
+                  </h2>
                   <p>Review professional registrations.</p>
                 </div>
 
@@ -350,12 +415,21 @@ export default function AdminAccess({ onLogout }) {
                 </button>
               </div>
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginBottom: 20,
+                }}
+              >
                 {["Pending", "Approved", "Rejected", "All"].map((status) => (
                   <button
                     key={status}
                     type="button"
-                    className={filter === status ? "continue-button" : "small-action"}
+                    className={
+                      filter === status ? "continue-button" : "small-action"
+                    }
                     onClick={() => setFilter(status)}
                   >
                     {status}
@@ -368,27 +442,72 @@ export default function AdminAccess({ onLogout }) {
               ) : (
                 <div className="medicine-list">
                   {filteredRequests.map((request) => (
-                    <article className="medicine-item" key={request.user_id} style={{ padding: 15, marginBottom: 12, border: "1px solid #e7ece9", borderRadius: 10, alignItems: "flex-start" }}>
-                      <div className="medicine-icon"><UserRound size={20} /></div>
+                    <article
+                      className="medicine-item"
+                      key={request.user_id}
+                      style={{
+                        padding: 15,
+                        marginBottom: 12,
+                        border: "1px solid #e7ece9",
+                        borderRadius: 10,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div className="medicine-icon">
+                        <UserRound size={20} />
+                      </div>
 
                       <div className="medicine-info" style={{ flex: 1 }}>
                         <h3>{request.full_name || request.role}</h3>
-                        <p>Role: <strong>{request.role}</strong></p>
-                        <p style={{ fontSize: 12, overflowWrap: "anywhere" }}>User ID: {request.user_id}</p>
+                        <p>
+                          Role: <strong>{request.role}</strong>
+                        </p>
+                        <p
+                          style={{
+                            fontSize: 12,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          User ID: {request.user_id}
+                        </p>
                         <strong>{request.status.toUpperCase()}</strong>
 
                         {request.status === "Pending" && (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                            <button className="continue-button" type="button" disabled={processingId === request.user_id} onClick={() => reviewRequest(request.user_id, "Approved")}>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
+                              marginTop: 12,
+                            }}
+                          >
+                            <button
+                              className="continue-button"
+                              type="button"
+                              disabled={processingId === request.user_id}
+                              onClick={() =>
+                                reviewRequest(request.user_id, "Approved")
+                              }
+                            >
                               <CheckCircle2 size={16} /> Approve
                             </button>
-                            <button className="small-action" type="button" disabled={processingId === request.user_id} onClick={() => reviewRequest(request.user_id, "Rejected")}>
+
+                            <button
+                              className="small-action"
+                              type="button"
+                              disabled={processingId === request.user_id}
+                              onClick={() =>
+                                reviewRequest(request.user_id, "Rejected")
+                              }
+                            >
                               <XCircle size={16} /> Reject
                             </button>
                           </div>
                         )}
 
-                        {processingId === request.user_id && <p>Processing...</p>}
+                        {processingId === request.user_id && (
+                          <p>Processing...</p>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -396,12 +515,16 @@ export default function AdminAccess({ onLogout }) {
               )}
             </section>
 
-            {/* ASSIGNMENT MANAGER */}
+            {/* ASSIGNMENT CREATION */}
             <section className="dashboard-panel">
               <div className="panel-heading">
                 <div>
-                  <h2><UserPlus size={21} /> Patient assignment manager</h2>
-                  <p>Assign approved professionals to registered patients.</p>
+                  <h2>
+                    <UserPlus size={21} /> Patient assignment manager
+                  </h2>
+                  <p>
+                    Assign approved professionals to registered patients.
+                  </p>
                 </div>
               </div>
 
@@ -416,7 +539,11 @@ export default function AdminAccess({ onLogout }) {
                   }}
                   style={fieldStyle}
                 >
-                  {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                  {ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
                 </select>
 
                 <label>Choose {selectedRole}</label>
@@ -427,6 +554,7 @@ export default function AdminAccess({ onLogout }) {
                   required
                 >
                   <option value="">Select {selectedRole}</option>
+
                   {professionals.map((u) => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.full_name} ({u.user_id.slice(0, 8)})
@@ -442,6 +570,7 @@ export default function AdminAccess({ onLogout }) {
                   required
                 >
                   <option value="">Select Patient</option>
+
                   {patients.map((u) => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.full_name} ({u.user_id.slice(0, 8)})
@@ -463,9 +592,17 @@ export default function AdminAccess({ onLogout }) {
                   </>
                 )}
 
-                <button className="continue-button" type="submit" disabled={assignmentLoading}>
+                <button
+                  className="continue-button"
+                  type="submit"
+                  disabled={assignmentLoading}
+                >
                   <UserPlus size={17} />
-                  {assignmentLoading ? "Creating..." : selectedRole === "Volunteer" ? "Create Volunteer Task" : "Create Assignment"}
+                  {assignmentLoading
+                    ? "Creating..."
+                    : selectedRole === "Volunteer"
+                    ? "Create Volunteer Task"
+                    : "Create Assignment"}
                 </button>
 
                 {professionals.length === 0 && (
@@ -482,22 +619,37 @@ export default function AdminAccess({ onLogout }) {
               </form>
             </section>
 
-            {/* ASSIGNMENT OVERVIEW */}
+            {/* ASSIGNMENT OVERVIEW AND CONTROLS */}
             <section className="dashboard-panel">
               <div className="panel-heading">
                 <div>
-                  <h2><ClipboardList size={21} /> Assignment overview</h2>
-                  <p>Review existing professional assignments and volunteer tasks.</p>
+                  <h2>
+                    <ClipboardList size={21} /> Assignment overview
+                  </h2>
+                  <p>
+                    View, deactivate, reactivate or cancel assignments.
+                  </p>
                 </div>
 
-                <button className="small-action" type="button" onClick={loadAssignments}>
+                <button
+                  className="small-action"
+                  type="button"
+                  onClick={refreshAssignments}
+                  disabled={assignmentProcessingId !== null}
+                >
                   <RefreshCw size={16} /> Refresh
                 </button>
               </div>
 
               {ROLES.map((role) => (
                 <div key={role} style={{ marginTop: 20 }}>
-                  <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <h3
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
                     {role === "Doctor" && <Stethoscope size={18} />}
                     {role === "Nurse" && <HeartPulse size={18} />}
                     {role === "Hospital" && <Hospital size={18} />}
@@ -509,18 +661,151 @@ export default function AdminAccess({ onLogout }) {
                     <p style={{ color: "#64746f" }}>No records found.</p>
                   ) : (
                     assignments[role].map((item) => {
-                      const id = role === "Doctor" ? item.doctor_id :
-                        role === "Nurse" ? item.nurse_id :
-                        role === "Hospital" ? item.hospital_id :
-                        item.volunteer_id;
+                      const professionalId =
+                        role === "Doctor"
+                          ? item.doctor_id
+                          : role === "Nurse"
+                          ? item.nurse_id
+                          : role === "Hospital"
+                          ? item.hospital_id
+                          : item.volunteer_id;
+
+                      const isVolunteer = role === "Volunteer";
+                      const isActive = item.is_active;
+                      const isCancelled = item.status === "Cancelled";
+                      const isProcessing =
+                        assignmentProcessingId === item.id;
 
                       return (
-                        <article key={item.id} className="medicine-item" style={{ padding: 12, marginBottom: 8, border: "1px solid #e7ece9", borderRadius: 10 }}>
-                          <div className="medicine-info" style={{ flex: 1 }}>
-                            <strong>{findName(id)}</strong>
+                        <article
+                          key={item.id}
+                          className="medicine-item"
+                          style={{
+                            padding: 14,
+                            marginBottom: 10,
+                            border: "1px solid #e7ece9",
+                            borderRadius: 10,
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div
+                            className="medicine-info"
+                            style={{ flex: 1 }}
+                          >
+                            <strong>{findName(professionalId)}</strong>
+
                             <p>Patient: {findName(item.patient_id)}</p>
-                            {role === "Volunteer" && <p>Task: {item.task_description}</p>}
-                            <p>Status: {role === "Volunteer" ? item.status : item.is_active ? "Active" : "Inactive"}</p>
+
+                            {isVolunteer && (
+                              <p>Task: {item.task_description}</p>
+                            )}
+
+                            <p>
+                              Status:{" "}
+                              <strong
+                                style={{
+                                  color: isVolunteer
+                                    ? isCancelled
+                                      ? "#b42318"
+                                      : item.status === "Completed"
+                                      ? "#167044"
+                                      : "#9a6700"
+                                    : isActive
+                                    ? "#167044"
+                                    : "#b42318",
+                                }}
+                              >
+                                {isVolunteer
+                                  ? item.status
+                                  : isActive
+                                  ? "Active"
+                                  : "Inactive"}
+                              </strong>
+                            </p>
+
+                            <p
+                              style={{
+                                fontSize: 12,
+                                color: "#64746f",
+                              }}
+                            >
+                              Created:{" "}
+                              {item.created_at
+                                ? new Date(item.created_at).toLocaleString()
+                                : "Not available"}
+                            </p>
+
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                flexWrap: "wrap",
+                                marginTop: 12,
+                              }}
+                            >
+                              {!isVolunteer && (
+                                <button
+                                  type="button"
+                                  className={
+                                    isActive
+                                      ? "small-action"
+                                      : "continue-button"
+                                  }
+                                  disabled={isProcessing}
+                                  onClick={() =>
+                                    updateAssignment(
+                                      role,
+                                      item.id,
+                                      isActive ? "Deactivate" : "Reactivate"
+                                    )
+                                  }
+                                >
+                                  {isActive ? (
+                                    <Ban size={16} />
+                                  ) : (
+                                    <RotateCcw size={16} />
+                                  )}
+
+                                  {isActive ? "Deactivate" : "Reactivate"}
+                                </button>
+                              )}
+
+                              {isVolunteer && !isCancelled && (
+                                <button
+                                  type="button"
+                                  className="small-action"
+                                  disabled={isProcessing}
+                                  onClick={() =>
+                                    updateAssignment(
+                                      "Volunteer",
+                                      item.id,
+                                      "Cancel"
+                                    )
+                                  }
+                                >
+                                  <XCircle size={16} />
+                                  Cancel Task
+                                </button>
+                              )}
+
+                              {isProcessing && (
+                                <span style={{ fontSize: 13 }}>
+                                  Updating...
+                                </span>
+                              )}
+
+                              {isVolunteer && isCancelled && (
+                                <span
+                                  style={{
+                                    color: "#b42318",
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  Task cancelled
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </article>
                       );
