@@ -393,7 +393,7 @@ export function useLanguage() {
     // Return fallback if outside provider
     return {
       language: "English",
-      setLanguage: () => {},
+      setLanguage: () => { },
       t: (text) => text,
     };
   }

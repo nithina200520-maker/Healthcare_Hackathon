@@ -2430,9 +2430,9 @@ function DoctorAccess({ onLogout }) {
 // MAIN APP
 // --------------------------------------------------
 
- // --------------------------------------------------
- // MAIN APP
- // --------------------------------------------------
+// --------------------------------------------------
+// MAIN APP
+// --------------------------------------------------
 
 function App() {
   const { t } = useLanguage();
@@ -2857,8 +2857,8 @@ function App() {
                           "Hospital",
                           "Volunteer",
                         ].includes(role.name) && (
-                          <small>{t("Administrator approval required")}</small>
-                        )}
+                            <small>{t("Administrator approval required")}</small>
+                          )}
                       </div>
 
                       <ArrowRight className="role-arrow" size={19} />
@@ -2896,10 +2896,10 @@ function App() {
               "Hospital",
               "Volunteer",
             ].includes(selectedRole) && (
-              <p className="demo-note">
-                {selectedRole} {t("accounts require administrator approval before dashboard access.")}
-              </p>
-            )}
+                <p className="demo-note">
+                  {selectedRole} {t("accounts require administrator approval before dashboard access.")}
+                </p>
+              )}
 
             <div className="auth-tabs">
               <button
