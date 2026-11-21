@@ -337,7 +337,8 @@ export const translations = {
 
 export function LanguageProvider({ children }) {
   const [language, setLanguageState] = useState(() => {
-    return localStorage.getItem("carebridge_language") || "English";
+    const saved = localStorage.getItem("carebridge_language");
+    return saved === "ಕನ್ನಡ" ? "ಕನ್ನಡ" : "English";
   });
 
   const setLanguage = (newLang) => {
@@ -413,8 +414,6 @@ export function LanguageSelector({ style, className = "language-select" }) {
       >
         <option value="English">English</option>
         <option value="ಕನ್ನಡ">ಕನ್ನಡ (Kannada)</option>
-        <option value="हिन्दी">हिन्दी (Hindi)</option>
-        <option value="తెలుగు">తెలుగు (Telugu)</option>
       </select>
     </div>
   );
